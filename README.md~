@@ -11,11 +11,8 @@ You need:
 In you working directory, copy:
 + `rundeadmap.py`
 + `DeadMapQA.C`
-+ `Logger.h`
 
-(do `chmod +x rundeadmap.py` if not already executable).
-
-To prduce the map a single coomand line is needed:
+Producing the objects is matter of a single coomand line:
 
 ```
 ./rundeadmp.py <run_number>

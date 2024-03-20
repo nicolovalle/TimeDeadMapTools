@@ -212,9 +212,9 @@ if __name__ == "__main__":
         stdout, stderr = process.communicate(timeout=60)
 
         with open(targetdir+'/ITSQA/root.log','w') as fqa:
-            fqa.write('========\n stderr \n========\n')
+            fqa.write('========\n stderr \n========')
             fqa.write(stderr.decode())
-            fqa.write('========\n stdout \n========\n')
+            fqa.write('========\n stdout \n========')
             fqa.write(stdout.decode())
 
         with open(targetdir+'/ITSQA/DeadMapQA.log') as fqa:
@@ -228,8 +228,7 @@ if __name__ == "__main__":
                    
     except Exception as e:
 
-        LOG(ERROR,'root for QA produced exceptions:',e)
-        execute('rm -fr '+targetdir+'/ITSQA/')
+        LOG(ERROR,'QA produced exceptions:',e)  
 
     LOG(INFO,'rundeadmap.py reached the end.')
     Exit()

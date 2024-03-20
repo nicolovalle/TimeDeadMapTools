@@ -238,21 +238,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   for (uint chip : MAP.rbegin()->second) LastMAP->SetBinContent(chip+1,1); 
 
-  double AvgEffIB=0, AvgEffOB=0, cib=0, cob=0; // average dead time over lanes. eff[i] is the dead time for lane i
-  for (int i=0; i<nn; i++) {
-    eff[i] = (1.*eff[i]/(currentorbit-firstorbit));
-    if (i<N_LANES_IB) {AvgEffIB += eff[i]; cib+=1;}
-    else {AvgEffOB += eff[i]; cob+=1;}
-  }
-  if (cib > 0) AvgEffIB /= cib; else AvgEffIB = 1.1111;
-  if (cob > 0) AvgEffOB /= cob; else AvgEffOB = 1.1111;
-
-  QALOG<<"Average IB dead time: "<<AvgEffIB<<"\n";
-  QALOG<<"Average OB dead time: "<<AvgEffOB<<"\n";
-
-  QAcheck["Avg dead time IB"] = (AvgEffIB < 0.02) ? "GOOD" : (AvgEffIB < 0.10) ? "MEDIUM" : "BAD";
-  QAcheck["Avg dead time OB"] = (AvgEffOB < 0.02) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
-    
+  for (int i=0; i<nn; i++) eff[i] = (eff[i]/(currentorbit-firstorbit));
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,eff[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
   if (worstIBorbit > 0) for (uint chip : MAP[worstIBorbit]) WorstIB->SetBinContent(chip+1,1);
@@ -260,6 +246,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   WorstOB->SetName(Form("Worst OB, step %d = %d sec",worstOBstep,(int)((worstOBorbit-firstorbit)*89.e-6)));
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
   WorstIB->SetName(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
+
+  
 
   QALOG<<"Comparing orbit range and run duration\n";
 
