@@ -54,7 +54,7 @@ Description of the output:
 + `alien_ctf_epn291.dat`: the selected CTFs, those analyzed by the workflow
 + `o2-deadmapbuilder.log/err` std out and std err of the O2 workflow
 + `orbits.png` a sketch of the orbit gap in betweemn the map steps, read from the O2 workflow logs
-+ `ITSQA/` results of the root macro processing and checking the ITS object. *This directory deos not exist of the root macro failed*.
++ `ITSQA/` results of the root macro processing and checking the ITS object. *This directory deos not exist if the root macro fails*.
     + `DeadMapQA.log` the output printed on this file by the macro
     + `DeadMapQA.png` a summary of the quality: that's the first picture to look at, the assess the object quality
     + `DeadMapQA.png` it contains the same info of `.png`, each pad in root format

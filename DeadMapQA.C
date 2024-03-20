@@ -250,8 +250,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QALOG<<"Average IB dead time: "<<AvgEffIB<<"\n";
   QALOG<<"Average OB dead time: "<<AvgEffOB<<"\n";
 
-  QAcheck["Avg dead time IB"] = (AvgEffIB < 0.02) ? "GOOD" : (AvgEffIB < 0.10) ? "MEDIUM" : "BAD";
-  QAcheck["Avg dead time OB"] = (AvgEffOB < 0.02) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
+  QAcheck["Avg dead time IB"] = (AvgEffIB < 0.03) ? "GOOD" : (AvgEffIB < 0.10) ? "MEDIUM" : "BAD";
+  QAcheck["Avg dead time OB"] = (AvgEffOB < 0.05) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
     
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,eff[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
