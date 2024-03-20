@@ -316,13 +316,13 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   grOB->SetLineColor(kBlue);
   grOB->SetMinimum(0);
   grOB->SetMaximum(1);
-  grOB->SetTitle("Dead time vs time");
+  grOB->SetTitle("Dead fraction vs time");
   grOB->GetXaxis()->SetTitle("time (sec)");
   grOB->Draw();
   grIB->Draw("same");
   gPad->SetLogy();
-  grOB->SetName("Dead time vs time OB");
-  grIB->SetName("Dead time vs time IB");
+  grOB->SetName("Dead fraction vs time OB");
+  grIB->SetName("Dead fraction vs time IB");
   grOB->Write();
   grIB->Write();
 
