@@ -142,6 +142,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   Long_t maxgap = 0;
 
+  Long_t unAnchorable = 0;
+
   const int NSteps = MAP.size();
 
   const int nn = N_LANES;
@@ -176,8 +178,12 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     previousorbit = currentorbit;
     currentorbit = M.first;
     if (countstep > 0)  {
-      hOrb->SetBinContent(countstep, currentorbit - previousorbit);
-      maxgap = TMath::Max(maxgap,(Long_t)(currentorbit-previousorbit));
+      Long_t ogap = currentorbit-previousorbit;
+      hOrb->SetBinContent(countstep, ogap);
+      maxgap = TMath::Max(maxgap,ogap);
+      if (ogap > 330000){
+	unAnchorable += (ogap - 330000);
+      }
     }
 
     
@@ -224,9 +230,15 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   
 
-  QALOG<<"Max orbit gap: "<<maxgap<<"\n.";
+  QALOG<<"Max orbit gap: "<<maxgap<<"\n";
 
-  QAcheck["Max orbit gap"] = (maxgap > 320000) ? "BAD" : (maxgap > 33000) ? "MEDIUM" : "GOOD";
+  QAcheck["Max orbit gap"] = (maxgap > 500000) ? "BAD" : (maxgap > 33000) ? "MEDIUM" : "GOOD";
+
+  double unAnchorableFrac = 1.*unAnchorable/ (currentorbit-firstorbit);
+
+  QALOG<<"Un-anchorable number of orbits: "<<unAnchorable<<", corresponding to a fraction of the run of "<<unAnchorableFrac<<"\n";
+
+  QAcheck["Un-anchorable fraction"] = (unAnchorableFrac < 0.02) ? "GOOD" : (unAnchorableFrac < 0.05) ? "MEDIUM" : "BAD";
 
   QALOG<<"Worst cases computed skipping first "<<SecForWorse<<" seconds.\n";
   QALOG<<"Worst OB case: orbit "<<worstOBorbit<<" step #"<<worstOBstep<<" dead lanes "<<worstOBcount<<"\n";

@@ -27,30 +27,33 @@ Notice that the O2 workflow can take several minutes. Better to use a `tmux` ses
 
 If everything goes well, your working directory will be populated with the following files:
 ```
-<your working dir>
+<working dir>
 ├── log.log
-├── 544180.log
 └── output/
-    └── 544180/
-        ├── full_ctf_list.dat
-        ├── alien_ctf_epn291.dat
-        ├── its_time_deadmap.root
-        ├── mft_time_deadmap.root
-        ├── o2-deadmapbuilder.err
-        ├── o2-deadmapbuilder.log
-        ├── orbits.png
-        └──ITSQA/
-           ├── DeadMapQA.log
-           ├── DeadMapQA.png
-           ├── DeadMapQA.root
-           └── root.log
+     └── 544180/
+         ├── main.log
+	 ├── period.txt
+         ├── full_ctf_list.dat
+         ├── alien_ctf_epn291.dat
+         ├── its_time_deadmap.root
+         ├── mft_time_deadmap.root
+         ├── o2-deadmapbuilder.err
+         ├── o2-deadmapbuilder.log
+         ├── orbits.png
+         └──ITSQA/
+             ├── DeadMapQA.log
+             ├── DeadMapQA.png
+             ├── DeadMapQA.root
+             └── root.log
 ```
 
-The log of the `rundeadmap.py` script will be in the working directory (`<run_number>.log`), while every other output file will be in `output/<run_number>/`. Please note:
+Please note:
 + You don't have to create any directory in advance, they will be created by the script.
 + If you re-process a run, the full directory `<run_number>/` will be deleted and overwritten!
 
 Description of the output:
++ `main.log` is the log of the main script `rundeadmap.py`. When the script is being executed, the log is written in the working directory and named `<run_number>.log`. It's moved in the output folder as the very last action of the script.
++ `period.txt`. It contains a single string with the LHC period of the run.
 + `its_time_deadmap.root` and `mft_time_deadmap.root` : **the time-dependent maps**. The script checks from bookkeeping that MFT was in the run. If not, only ITS workflow is run. 
 + `full_ctf_list.dat`: the list of CTFs on grid for that run
 + `alien_ctf_epn<..>.dat`: the selected CTFs, those analyzed by the workflow
@@ -65,10 +68,12 @@ Description of the output:
 
 ## What to check?
 
-The main script log (`<run_number>.log`) contains a summary of the full process. It checks the O2 workflow logs, the orbits gap in the map, the map duration compared to run duration and the presence of BAD quality spotted by the root QA macro. Therefore:
+The main script log contains a summary of the full process. It checks the O2 workflow logs, the orbits gap in the map, the map duration compared to run duration and the presence of BAD quality spotted by the root QA macro. Therefore:
 
-+ Just `grep` the strings "WARNING", "ERROR" or "FATAL" in the main script log! If nothing is found, most probably everything was good. 
-+ For commissioning purpose, please also check that "*rundeadmap.py reached the end.*" is the last message of the main script log. This guarantees that unexpected crashes happened.
++ Just `grep` the strings "WARNING", "ERROR" or "FATAL" in the main script logs! If nothing is found, most probably everything is good.
+
+None of the main script logs should remain in the working dir (`<run_number>.log`). If this happens, the script crashed or failed in an unexpected way.
+
 
 If bad quality of the QA output is reported, the details are in the last lines of `DeadMapQA.log` and in the `.png` as well. 
 

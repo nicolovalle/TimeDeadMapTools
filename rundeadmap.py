@@ -21,6 +21,8 @@ DEBUG = 'DEBUG'
 # Usage: ./rundeadmap.py <run_number>
 
 logfile = 'log.log'
+run = -1
+targetdir = "none"
 
 #_________________________________________________________________________________
 def LOG(severity, *message):
@@ -40,15 +42,17 @@ def LOG(severity, *message):
         f.write("[%s][%s][%s] "%(tstamp,severity,filename+':'+funcname)+writestring+'\n')
 
 #________________________________________________________________________________
-def Exit(severitylog = INFO):
-    print(severitylog,'EXITING')
-    exit()
-
-#________________________________________________________________________________
 def execute(command, log = True, severitylog = INFO):
     if log:
         LOG(severitylog,"Exec -- ",command)
     os.system(command)
+
+#________________________________________________________________________________
+def Exit(severitylog = INFO):
+    if os.path.exists(targetdir) and logfile != 'log.log':
+        execute('mv -f '+logfile+' '+targetdir+'/main.log')
+    print(severitylog,'EXITING')
+    exit()
 
 #________________________________________________________________________________
 def querylogbook(run):
@@ -56,17 +60,21 @@ def querylogbook(run):
     req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0'%(str(run)),verify=False)
     data = json.loads(req.text)['data']
     if len(data) != 1:
-        LOG(ERROR,'Data from bookeeping of wrong size:',len(data))
+        LOG(FATAL,'Data from bookeeping of wrong size:',len(data))
         Exit(FATAL)
     else:
-        for run in data:
-            period = run['lhcPeriod']
-            list_det = run['detectors'].split(',')
-        IsITS = 'ITS' in list_det
-        IsMFT = 'MFT' in list_det
-        secDuration = int(run['runDuration'])/1000       
-        LOG(INFO,'Returning period',period,' duration',secDuration,' Detectors: ITS',IsITS,', MFT',IsMFT)
-        return str(period), secDuration, IsITS, IsMFT
+        try:
+            for rrun in data:
+                period = rrun['lhcPeriod']
+                list_det = rrun['detectors'].split(',')
+                IsITS = 'ITS' in list_det
+                IsMFT = 'MFT' in list_det
+                secDuration = int(rrun['runDuration'])/1000       
+            LOG(INFO,'Returning period',period,' duration',secDuration,' Detectors: ITS',IsITS,', MFT',IsMFT)
+            return str(period), secDuration, IsITS, IsMFT
+        except Exception as e:
+            LOG(FATAL,'Error in parsing the bookkeeping data:',e)
+            Exit(FATAL)
         
     
     
@@ -75,34 +83,34 @@ def querylogbook(run):
 
 if __name__ == "__main__":
 
-    LOG(INFO,"Starting ",sys.argv[0],sys.argv[1])
+    LOG(INFO,"Starting",sys.argv[0],"argv:",sys.argv[1:])
 
-    logfile = str(sys.argv[1])+'.log'
-    
-    with open(logfile,'w') as f:
-        f.write(logfile+'\n')
-    LOG(INFO,"Starting ",sys.argv[0],sys.argv[1])
-        
     try:
         run = int(sys.argv[1])
     except:
-        LOG(FATAL, "Inputs not recognized.")
-        Exit()
+        LOG(FATAL, "Input not recognized")
+        Exit(FATAL)
+
+    run = str(run)
+    logfile = run+'.log'
+
+    LOG(INFO,"Starting",sys.argv[0],sys.argv[1])
+        
+    targetdir = './output/'+run
+
+    if os.path.exists(targetdir):
+        LOG(INFO,"Directory "+targetdir+" already exists. Deleting it.")
+        execute("rm -fr "+targetdir, False)
+    execute('mkdir -p '+targetdir)
         
     period, secDuration, doITS, doMFT = querylogbook(run)
-
+        
     year = '20'+period[3:5]
-    run = str(run)
     LOG(INFO,"Processing run",run,"from period",period,"year",year,'. Duration(min) = ',secDuration/60)
 
-    if os.path.exists('./output/'+run):
-        LOG(INFO,"Directory ./output/"+run,"already exists. Deleting it.")
-        execute("rm -fr ./output/"+run, False)
-         
-
-    targetdir = './output/'+run
-    execute('mkdir -p '+targetdir)
-
+    with open(targetdir+'/period.txt','w') as f:
+        f.write(period)
+        
     execute('alien_find /alice/data/'+year+'/'+period+'/'+run+'/raw/ o2_ctf* > '+targetdir+'/full_ctf_list.dat')
 
     with open(targetdir+'/full_ctf_list.dat') as f:
@@ -117,8 +125,8 @@ if __name__ == "__main__":
 
     try:
         epnlist = [ re.search('epn[0-9]{3}', l).group(0) for l in tflist]
-    except:
-        LOG(FATAL,"Failing in extracting EPN list")
+    except Exception as e:
+        LOG(FATAL,"Failing in extracting EPN list",e)
         Exit(FATAL)
 
     targetEPN = max(set(epnlist), key=epnlist.count)
@@ -153,7 +161,7 @@ if __name__ == "__main__":
         exectute(ITScommand)
     else:
         LOG(FATAL,'ITS is not in the run, doing nothing')
-        Exit()
+        Exit(FATAL)
     t__stop = time.time()
 
     LOG(INFO,"Process took",round(t__stop - t__start,2),"sec.",round((t__stop-t__start)/60.,2),"min.")
@@ -192,8 +200,8 @@ if __name__ == "__main__":
 
     OrbitRangeSec = (orbits[-1]-orbits[0])*89.e-6
     LOG(INFO,"Number of TFs:",len(orbits)," Orbit range",orbits[0],":",orbits[-1]," corresponding to ",OrbitRangeSec/60,"min")
-    if abs(OrbitRangeSec - secDuration)/secDuration > 0.05:
-        LOG(ERROR,'Big difference between range in the map and run duration')
+    if abs(OrbitRangeSec - secDuration) > 30:
+        LOG(ERROR,'Big difference between range in the map (',OrbitRangeSec,' s) and run duration (',secDuration,' s)')
     sevcheck = INFO
     sigmaorb = statistics.pstdev(orbgap)
     if max(orbgap) > 320000:
@@ -202,7 +210,7 @@ if __name__ == "__main__":
         sevcheck = WARNING
     LOG(sevcheck,"Max orbit gap:",max(orbgap),"Min orbit gap:",min(orbgap),"Std orbit gap:",sigmaorb)
     LOG(INFO,targetdir+'/orbits.png created.')
-    LOG(INFO,'Run',run,'completed. Running QA on object. Setting timout = 60 sec')
+    LOG(INFO,'Run',run,'completed. Running QA on object. Setting timeout = 60 sec')
 
     try:
         
@@ -223,13 +231,19 @@ if __name__ == "__main__":
                 if 'ERROR' in ll:
                     LOG(ERROR,'There are errors in the object QA')
                     break
+            for ll in loglines:
                 if 'WARNING' in ll:
                     LOG(WARNING,'There are warnings in the object QA')
+                    break
+            for ll in loglines:
+                if 'FATAL' in ll:
+                    LOG(ERROR,'There are FATAL errors in the object QA')
+                    break
                    
     except Exception as e:
 
         LOG(ERROR,'root for QA produced exceptions:',e)
         execute('rm -fr '+targetdir+'/ITSQA/')
 
-    LOG(INFO,'rundeadmap.py reached the end.')
+    LOG(INFO,'---> rundeadmap.py reached the end <---')
     Exit()
