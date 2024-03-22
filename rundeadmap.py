@@ -59,6 +59,9 @@ def querylogbook(run):
     LOG(INFO,'Querying bookkeeping for run',run)
     req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0'%(str(run)),verify=False)
     data = json.loads(req.text)['data']
+    if os.path.exists(targetdir):
+        with open(targetdir+'/run.json') as f:
+            json.dump(data, f, indent=2)
     if len(data) != 1:
         LOG(FATAL,'Data from bookeeping of wrong size:',len(data))
         Exit(FATAL)

@@ -33,6 +33,7 @@ If everything goes well, your working directory will be populated with the follo
      └── 544180/
          ├── main.log
 	 ├── period.txt
+	 ├── run.json
          ├── full_ctf_list.dat
          ├── alien_ctf_epn291.dat
          ├── its_time_deadmap.root
@@ -54,6 +55,7 @@ Please note:
 Description of the output:
 + `main.log` is the log of the main script `rundeadmap.py`. When the script is being executed, the log is written in the working directory and named `<run_number>.log`. It's moved in the output folder as the very last action of the script.
 + `period.txt`. It contains a single string with the LHC period of the run.
++ `run.json`. The run info read from bookkeeping.
 + `its_time_deadmap.root` and `mft_time_deadmap.root` : **the time-dependent maps**. The script checks from bookkeeping that MFT was in the run. If not, only ITS workflow is run. 
 + `full_ctf_list.dat`: the list of CTFs on grid for that run
 + `alien_ctf_epn<..>.dat`: the selected CTFs, those analyzed by the workflow
@@ -61,7 +63,7 @@ Description of the output:
 + `orbits.png` a sketch of the orbit gap in betweemn the map steps, read from the O2 workflow logs
 + `ITSQA/` results of the root macro processing and checking the ITS object. *This directory deos not exist if the root macro fails*.
     + `DeadMapQA.log` the output printed on this file by the macro
-    + `DeadMapQA.png` a summary of the quality: that's the first picture to look at, the assess the object quality
+    + `DeadMapQA.png` a summary of the quality: that's the first picture to look at, to assess the object quality
     + `DeadMapQA.png` it contains the same info of `.png`, each pad in root format
     + `root.log` that contains std err and std out of the command `root -b DeadMapQA.C`
 
