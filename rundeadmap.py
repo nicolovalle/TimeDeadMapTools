@@ -161,7 +161,7 @@ if __name__ == "__main__":
     if doITS and doMFT:
         execute(ITSMFTcommand)
     elif doITS:
-        exectute(ITScommand)
+        execute(ITScommand)
     else:
         LOG(FATAL,'ITS is not in the run, doing nothing')
         Exit(FATAL)
