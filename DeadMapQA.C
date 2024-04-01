@@ -82,6 +82,37 @@ void fillmap(TString fname);
 
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
+void PrintAndExit(TString spec=""){
+
+  QALOG<<"\nQA SUMMARY\n";
+
+  bool IsQAMedium=false, IsQABad=false, IsQAFatal=false;
+  for (auto cc : QAcheck){
+    QALOG<<"QA CHECK - "<<cc.first<<": "<<cc.second<<"\n";
+    if (cc.second == "MEDIUM") IsQAMedium = true;
+    if (cc.second == "BAD") IsQABad = true;
+    if (cc.second == "FATAL") IsQAFatal = true;
+  }
+
+  if (IsQAFatal){
+    QALOG<<"FATAL - Global quality is FATAL\n";
+  }
+  else if (IsQABad){
+    QALOG<<"ERROR - Global quality is BAD\n";
+  }
+  else if (IsQAMedium){
+    QALOG<<"WARNING - Global quality is MEDIUM\n";
+  }
+  else{
+    QALOG<<"INFO - Global quality is GOOD\n";
+  }
+  
+  QALOG<<"Exiting the macro. "<<spec<<"\n";
+
+  exit(0);
+}
+  
+
 void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./"){
 
   QALOG.open(outdir+logfilename);
@@ -400,28 +431,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
   QALOG<<"Orbits: "<<firstorbit<<" to "<<currentorbit<<" corrsponding to "<<(currentorbit - firstorbit)*89.e-6 / 60.<<" minutes\n";
 
-  QALOG<<"\nQA SUMMARY\n";
-
-  bool IsQAMedium=false, IsQABad=false;
-  for (auto cc : QAcheck){
-    QALOG<<"QA CHECK - "<<cc.first<<": "<<cc.second<<"\n";
-    if (cc.second == "MEDIUM") IsQAMedium = true;
-    if (cc.second == "BAD") IsQABad = true;
-  }
-
-  if (IsQABad){
-    QALOG<<"ERROR - Global quality is BAD\n";
-  }
-  else if (IsQAMedium){
-    QALOG<<"WARNING - Global quality is MEDIUM\n";
-  }
-  else{
-    QALOG<<"INFO - Global quality is GOOD\n";
-  }
+  
   
   if (ExitWhenFinish){
-    QALOG<<"EXITING DeadMapQA\n";
-    exit(0);
+    PrintAndExit();
   }
  
 }
@@ -565,7 +578,7 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 
 	if (firstlane == 9999 || lastlane == 9999){
 	  QALOG<<"FATAL decoding of chip intervals, returning emtpy vector\n";
-	  QAcheck["Chip interval"] = "BAD";
+	  QAcheck["Chip interval"] = "FATAL";
 	  return elementlist;
 	}
 	else{
@@ -580,6 +593,7 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 
   else{
     QALOG<<"FATAL: map version not recognized, returning empty vector.\n";
+    QAcheck["MAP version"] = "FATAL";
   }
 
   return elementlist;
@@ -604,8 +618,8 @@ void fillmap(TString fname){
   f->Close();
 
   if (!obj){
-    QALOG<<"FATAL object not found\n.";
-    return;
+    QAcheck["ROOT file corrupted"] = "FATAL";
+    PrintAndExit("FATAL object not found");
   }
   
 
@@ -622,6 +636,13 @@ void fillmap(TString fname){
   QALOG<<"Static map size = "<<StaticMap.size()<<"\n";
 
   QAcheck["Map size"] = (obj->getEvolvingMapSize() > 0 && StaticMap.size() > 0) ? "GOOD" : "BAD";
+  if (obj->isDefault()){
+    if (obj->getEvolvingMapSize() == 0 && StaticMap.size() == 0){
+      QAcheck["Map size"] = "GOOD";
+    }
+    QAcheck["Default object"] = "FATAL";
+    PrintAndExit("Exiting because default object");
+  }
 
   SMAP = expandvector(StaticMap,mapver,"chip");
 
