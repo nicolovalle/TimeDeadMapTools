@@ -161,6 +161,18 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     HSMAP->SetBinContent(i+1,effstat[i]);
   }
 
+  int nfullydeadIB = 0;
+  int nwithfullydeadOB = 0;
+  for (int i=0; i<nn; i++){
+    if (effstat[i] > 0 && i < N_LANES_IB) nfullydeadIB++;
+    if (effstat[i] > 0 && i >= N_LANES_IB) nwithfullydeadOB++;
+  }
+  QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
+  QALOG<<"Static map: OB lanes with at least one fully dead chip: "<<nwithfullydeadOB<<"\n";
+  QAcheck["Fully dead IB"] = (nfullydeadIB == 0) ? "GOOD" : (nfullydeadIB < 4) ? "MEDIUM" : "BAD";
+  QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";
+  
+
 
   int worstOBcount = -1, worstIBcount = -1;
   int worstOBstep = -1, worstIBstep = -1;
