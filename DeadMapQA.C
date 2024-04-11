@@ -109,6 +109,8 @@ void PrintAndExit(TString spec=""){
   
   QALOG<<"Exiting the macro. "<<spec<<"\n";
 
+  QALOG.close();
+  
   exit(0);
 }
   

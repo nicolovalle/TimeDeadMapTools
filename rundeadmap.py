@@ -24,6 +24,8 @@ logfile = 'log.log'
 run = -1
 targetdir = "none"
 
+bktokenfile = "token.dat"
+
 #_________________________________________________________________________________
 def LOG(severity, *message):
     global logfile
@@ -57,7 +59,13 @@ def Exit(severitylog = INFO):
 #________________________________________________________________________________
 def querylogbook(run):
     LOG(INFO,'Querying bookkeeping for run',run)
-    req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0'%(str(run)),verify=False)
+    LOG(INFO,'Reading token for bookkeeping API from ',bktokenfile)
+    with open(bktokenfile,'r') as f:
+        tok = f.readline().strip()
+    req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0&token=%s'%(str(run),str(tok)),verify=False)
+    if str(req.status_code) != '200':
+        LOG(FATAL,'Bookkeeping response:',req.status_code)
+        Exit(FATAL)
     data = json.loads(req.text)['data']
     if os.path.exists(targetdir):
         with open(targetdir+'/run.json','w') as f:
