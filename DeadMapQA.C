@@ -35,6 +35,8 @@ TString logfilename = "DeadMapQA.log";
 double SecForWorse = 15;
 bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
+Long_t NominalGap = 32000;
+Long_t UnanchorableThreshold = 330000;
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}, // L1
@@ -155,6 +157,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH1F *hOrb = new TH1F("Orbits gap","Orbits gap",MAP.size()-1,1,MAP.size());
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
+  TH1F *hTimeSpan = new TH1F("Time range","Time range",2,0,2);
+
+
 
   
   HMAP->Clear();
@@ -172,8 +177,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   Long_t currentorbit = 0;
   Long_t previousorbit = 0;
-
+  
   Long_t maxgap = 0;
+  int ngap_overnominal = 0;
 
   Long_t unAnchorable = 0;
 
@@ -226,8 +232,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       Long_t ogap = currentorbit-previousorbit;
       hOrb->SetBinContent(countstep, ogap);
       maxgap = TMath::Max(maxgap,ogap);
-      if (ogap > 330000){
-	unAnchorable += (ogap - 330000);
+      if (ogap > NominalGap){
+	ngap_overnominal++;
+      }
+      if (ogap > UnanchorableThreshold){
+	unAnchorable += (ogap - UnanchorableThreshold);
       }
     }
 
@@ -276,8 +285,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
 
   QALOG<<"Max orbit gap: "<<maxgap<<"\n";
+  QALOG<<"Number of gaps over nominal ("<<NominalGap<<"): "<<ngap_overnominal<<"\n";
 
-  QAcheck["Max orbit gap"] = (maxgap > 500000) ? "BAD" : (maxgap > 33000) ? "MEDIUM" : "GOOD";
+  QAcheck["Orbit gaps"] = (maxgap > 2.*UnanchorableThreshold || ngap_overnominal > 0.25*NSteps ) ? "BAD" : (maxgap > NominalGap && ngap_overnominal > 2 ) ? "MEDIUM" : "GOOD";
 
   double unAnchorableFrac = 1.*unAnchorable/ (currentorbit-firstorbit);
 
@@ -335,6 +345,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     (MAPduration >= RCTrunduration - 30) ? "MEDIUM" :
     "BAD";
 
+  hTimeSpan->SetBinContent(1,RCTrunduration);
+  hTimeSpan->SetBinContent(2,MAPduration);
+
   TFile outroot(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
  
   c1->cd(1); // average evolving map
@@ -348,6 +361,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   HSMAP->Write();
 
   c1->cd(3);
+  hTimeSpan->GetXaxis()->SetBinLabel(1,"RCT");
+  hTimeSpan->GetXaxis()->SetBinLabel(2,"MAP");
+  hTimeSpan->GetYaxis()->SetTitle("sec");
+  hTimeSpan->Draw("histo");
+  hTimeSpan->Write();
 
   c1->cd(4);
 
@@ -401,7 +419,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   LastMAP->Draw("lcolz");
   LastMAP->Write();
 
-  c1->cd(3); // text summary
+  c1->cd(4); // text summary
   TLatex latex;
   latex.SetNDC();
   double yPos = .9;
