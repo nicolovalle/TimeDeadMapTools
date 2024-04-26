@@ -4,16 +4,19 @@ Code for production and check of ITS efficiency maps.
 ## How to run
 
 You need:
-+ To be inside the CERN network (to reach the bookkeeping and query the API)
++ A personal ali-bookkeeping token (see below how to get it)
 + An up-to-date (22 march 2024) O2 environment
 
+Write your token in a file named `token.dat`.
 
 In you working directory you must have:
 + `rundeadmap.py`
 + `DeadMapQA.C`
 + `Logger.h`
++ `token.dat`
 
 (do `chmod +x rundeadmap.py` if not already executable).
+
 
 To prduce the map a single coomand line is needed:
 
@@ -43,7 +46,8 @@ If everything goes well, your working directory will be populated with the follo
          ├── orbits.png
          └──ITSQA/
              ├── DeadMapQA.log
-             ├── DeadMapQA.png
+             ├── DeadMapQA1.png
+             ├── DeadMapQA2.png
              ├── DeadMapQA.root
              └── root.log
 ```
@@ -63,8 +67,9 @@ Description of the output:
 + `orbits.png` a sketch of the orbit gap in betweemn the map steps, read from the O2 workflow logs
 + `ITSQA/` results of the root macro processing and checking the ITS object. *This directory deos not exist if the root macro fails*.
     + `DeadMapQA.log` the output printed on this file by the macro
-    + `DeadMapQA.png` a summary of the quality: that's the first picture to look at, to assess the object quality
-    + `DeadMapQA.png` it contains the same info of `.png`, each pad in root format
+    + `DeadMapQA1.png` a summary of the quality: that's the first picture to look at, to assess the object quality
+    + `DeadMapQA2.png` the complete history of the lanes status vs orbit
+    + `DeadMapQA.root` it contains the same info of `.png`, each pad in root format
     + `root.log` that contains std err and std out of the command `root -b DeadMapQA.C`
 
 
@@ -82,6 +87,16 @@ If bad quality of the QA output is reported, the details are in the last lines o
 ## More details...
 
 to be completed 
+
+## How to get bookkeeping token
+
+You can generate your personal token with following steps:
+
++ Log into [https://ali-bookkeeping.cern.ch/](https://ali-bookkeeping.cern.ch/?page=home)
++ Open browser developer console
++ Type `sessionService.session.token`
+
+Personal token will be printed into console.
 
 ## Extra/temporary
 

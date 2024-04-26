@@ -52,6 +52,7 @@ const std::vector<std::vector<int>> Enabled{ // not in use yet
 
 // global variables handled by the functions
 std::map<unsigned long, std::vector<uint16_t>> MAP;
+std::vector<unsigned long> MAPKeys;
 std::vector<uint16_t> SMAP;
 std::map<TString, TString> QAcheck;
 long runstart = -1, mapstart = -1, runstop = -1, mapstop = -1;
@@ -63,6 +64,7 @@ const int NStaves[7] = { 12, 16, 20, 24, 30, 42, 48 };
 const int NZElementsInHalfStave[7] =  {9,9,9, 4, 4, 7, 7};
 const int NSegmentsStave[7] = {1, 1, 1, 4, 4, 4, 4};
 const int N_LANES_IB = 432;
+const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
 int LaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
 
@@ -75,6 +77,9 @@ void getlanecoordinates(int laneid, double *px, double *py);
 
 uint16_t isFirstOfLane(uint16_t chipid);
 uint16_t isLastOfLane(uint16_t chipid);
+uint16_t StaveToLayer(uint16_t stv);
+uint16_t FirstLaneOfStave(uint16_t stv);
+uint16_t LastLaneOfStave(uint16_t stv);
 
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, int version);
 
@@ -132,13 +137,17 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   TH2Poly *LastMAP = new TH2Poly(); // last snapshot
 
-  TCanvas *c1 = new TCanvas("QAsummary","QAsummary",1800,1350);
+  TCanvas *c2 = new TCanvas("QAsummary2","QAsummary2", 6300, 2960);
+  c2->Divide(3,1);
+
+  TCanvas *c1 = new TCanvas("QAsummary1","QAsummary1",1800,1800);
   c1->Divide(4,3);
 
   gStyle->SetOptStat(0);
   gStyle->SetPalette(kBlackBody);
   TColor::InvertPalette();
 
+  
   for (int i=0; i<N_LANES; i++){
     double *px = new double[4];
     double *py = new double[4];
@@ -152,13 +161,19 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
 
   QAcheck["Chip interval"] = "GOOD";
-  fillmap(FILENAME); // fill both MAP and SMAP, checking them
+  fillmap(FILENAME); // fill both MAP and SMAP, checking them. Exit if map is empty or default.
   
   TH1F *hOrb = new TH1F("Orbits gap","Orbits gap",MAP.size()-1,1,MAP.size());
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hTimeSpan = new TH1F("Time range","Time range",2,0,2);
 
+  const Int_t hInbin = MAP.size()-1;
+  Double_t hIbins[hInbin+1];
+  for (int i=0; i < hInbin+1; i++) hIbins[i] = (Double_t)MAPKeys[i];
+  TH2F *hStatusTimeIB = new TH2F("Status vs time IB",Form("Run %d - Status vs time IB;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES_IB, 0, N_LANES_IB);
+  TH2F *hStatusTimeML = new TH2F("Status vs time ML",Form("Run %d - Status vs time ML;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES_ML, N_LANES_IB, N_LANES_IB+N_LANES_ML);
+  TH2F *hStatusTimeOL = new TH2F("Status vs time OL",Form("Run %d - Status vs time OL;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES-N_LANES_IB-N_LANES_ML, N_LANES_IB+N_LANES_ML, N_LANES);
 
 
   
@@ -250,7 +265,13 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
     int OBdead = 0, IBdead = 0;
     for (int il = 0; il<2; il++) BarrelEfficiency[il][countstep] = 0.;
+    
     for (uint lan : M.second) {
+
+      if (lan < N_LANES_IB) hStatusTimeIB->Fill(currentorbit+1, lan); // "+1" to avoid edge effect in conversion from long to double
+      else if (lan < N_LANES_IB + N_LANES_ML) hStatusTimeML->Fill(currentorbit+1, lan);
+      else hStatusTimeOL->Fill(currentorbit+1,lan);
+      
       if (lan < N_LANES_IB) IBdead++;
       else OBdead++;
       int ibarrel = (int)(LaneToLayer[lan] > 2);
@@ -275,10 +296,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       hEffIB->SetBinContent(countstep,1.*IBdead/N_LANES_IB);
     }
 
+    for (uint chip : M.second) eff[chip] += (currentorbit - previousorbit);
+
     // step up
     countstep++;
-
-    for (uint chip : M.second) eff[chip] += (currentorbit - previousorbit);
   
   } // end of for M:MAP
 
@@ -443,9 +464,28 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     latex.DrawLatex(0.1,yPos,Form("%s : %s",cc.first.Data(),cc.second.Data()));
   }
 
+  c2->cd(1);
+  hStatusTimeIB->GetYaxis()->SetNdivisions(0.-(N_LANES_IB/9));
+  hStatusTimeIB->Draw("col");    
+  hStatusTimeIB->Write();
+  gPad->SetGrid(0,1);
+
+  c2->cd(2);
+  hStatusTimeML->GetYaxis()->SetNdivisions(0.-(N_LANES_ML/16));
+  hStatusTimeML->Draw("col");
+  hStatusTimeML->Write();
+  gPad->SetGrid(0,1);
+
+  c2->cd(3);
+  hStatusTimeOL->GetYaxis()->SetNdivisions(0.-(N_LANES-N_LANES_ML-N_LANES_IB/28));
+  hStatusTimeOL->Draw("col");
+  hStatusTimeOL->Write();
+  //gPad->SetGrid(0,1);
 
   c1->Write();
-  c1->SaveAs(Form("%s/DeadMapQA.png",outdir.Data()));
+  c2->Write();
+  c1->SaveAs(Form("%s/DeadMapQA1.png",outdir.Data()));
+  c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
 
   outroot.Close();
   
@@ -563,6 +603,32 @@ uint16_t isLastOfLane(uint16_t chipid){ // 9999 if it is not
   else return isFirstOfLane(chipid - 6);
 }
 
+uint16_t StaveToLayer(uint16_t stv){
+  int count = 0;
+  for (int i=0; i<7; i++){
+    count+=NStaves[i];
+    if (stv < count) return (uint16_t)i;
+  }
+}
+
+uint16_t FirstLaneOfStave(uint16_t stv){
+
+  uint16_t lay = StaveToLayer(stv);
+  if (lay < 3) return stv*9;
+  else if (lay < 5) return N_LANES_IB + (stv - NStaves[0] - NStaves[1] - NStaves[2])*16;
+  else return N_LANES_IB + N_LANES_ML + (stv - NStaves[0] - NStaves[1] - NStaves[2] - NStaves[3] - NStaves[4]) * 28;
+}
+
+
+uint16_t LastLaneOfStave(uint16_t stv){
+
+  uint16_t lay = StaveToLayer(stv);
+  if (lay < 3) return FirstLaneOfStave(stv)+8;
+  if (lay < 5) return FirstLaneOfStave(stv)+15;
+  else return FirstLaneOfStave(stv)+27;
+}
+
+
   
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string version, TString opt = "lane"){
 
@@ -629,6 +695,7 @@ uint16_t ChipToLane(uint16_t chipid){
 void fillmap(TString fname){
 
   MAP.clear();
+  MAPKeys.clear();
   SMAP.clear();
 
   TFile *f = new TFile(fname);
@@ -663,13 +730,17 @@ void fillmap(TString fname){
     QAcheck["Default object"] = "FATAL";
     PrintAndExit("Exiting because default object");
   }
+  if (obj->getEvolvingMapSize() == 0){
+    QAcheck["Map size"] = "FATAL";
+    PrintAndExit("Exiting because evolving map is empty");
+  }
 
   SMAP = expandvector(StaticMap,mapver,"chip");
 
-  std::vector<unsigned long> Keys = obj->getEvolvingMapKeys();
+  MAPKeys = obj->getEvolvingMapKeys();
 
   QALOG<<"Orbit keys imported. Importing maps...\n";
-  for (auto OO : Keys){
+  for (auto OO : MAPKeys){
     std::vector<uint16_t> MapAtOrbit;
     obj->getMapAtOrbit(OO, MapAtOrbit);
     MAP[OO] = expandvector(MapAtOrbit,mapver,"lane");
