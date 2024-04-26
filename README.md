@@ -4,7 +4,7 @@ Code for production and check of ITS efficiency maps.
 ## How to run
 
 You need:
-+ A personal ali-bookkeeping token (see below how to get it)
++ A bookkeeping token
 + An up-to-date (22 march 2024) O2 environment
 
 Write your token in a file named `token.dat`.
@@ -87,16 +87,6 @@ If bad quality of the QA output is reported, the details are in the last lines o
 ## More details...
 
 to be completed 
-
-## How to get bookkeeping token
-
-You can generate your personal token with following steps:
-
-+ Log into [https://ali-bookkeeping.cern.ch/](https://ali-bookkeeping.cern.ch/?page=home)
-+ Open browser developer console
-+ Type `sessionService.session.token`
-
-Personal token will be printed into console.
 
 ## Extra/temporary
 
