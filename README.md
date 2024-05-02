@@ -48,6 +48,7 @@ If everything goes well, your working directory will be populated with the follo
              ├── DeadMapQA.log
              ├── DeadMapQA1.png
              ├── DeadMapQA2.png
+             ├── DeadMapQA3.png
              ├── DeadMapQA.root
              └── root.log
 ```
@@ -69,6 +70,7 @@ Description of the output:
     + `DeadMapQA.log` the output printed on this file by the macro
     + `DeadMapQA1.png` a summary of the quality: that's the first picture to look at, to assess the object quality
     + `DeadMapQA2.png` the complete history of the lanes status vs orbit
+    + `DeadMapQA3.png` the average dead time, stave by stave
     + `DeadMapQA.root` it contains the same info of `.png`, each pad in root format
     + `root.log` that contains std err and std out of the command `root -b DeadMapQA.C`
 

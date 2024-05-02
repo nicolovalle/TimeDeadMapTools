@@ -66,7 +66,11 @@ const int NSegmentsStave[7] = {1, 1, 1, 4, 4, 4, 4};
 const int N_LANES_IB = 432;
 const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
+const int N_STAVES_IB = 12+16+20;
+const int N_STAVES = 192;
 int LaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
+int LaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
+int LaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
 
 float LHCOrbitNS = 88924.6; // o2::constants::lhc::LHCOrbitNS
 
@@ -87,6 +91,7 @@ uint16_t ChipToLane(uint16_t chipid);
 
 void fillmap(TString fname);
 
+void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
 void PrintAndExit(TString spec=""){
@@ -140,8 +145,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TCanvas *c2 = new TCanvas("QAsummary2","QAsummary2", 6300, 2960);
   c2->Divide(3,1);
 
-  TCanvas *c1 = new TCanvas("QAsummary1","QAsummary1",1800,1800);
+  TCanvas *c1 = new TCanvas("QAsummary1","QAsummary1",2400,1800);
   c1->Divide(4,3);
+
+  TCanvas *c3 = new TCanvas("QAsummary3","QAsummary3",4000,1500);
 
   gStyle->SetOptStat(0);
   gStyle->SetPalette(kBlackBody);
@@ -158,6 +165,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     WorstIB->AddBin(4,px,py);
     LastMAP->AddBin(4,px,py);
   }
+  RemoveAxis(HMAP);
+  RemoveAxis(HSMAP);
+  RemoveAxis(WorstOB);
+  RemoveAxis(WorstIB);
+  RemoveAxis(LastMAP);
 
 
   QAcheck["Chip interval"] = "GOOD";
@@ -175,7 +187,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH2F *hStatusTimeML = new TH2F("Status vs time ML",Form("Run %d - Status vs time ML;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES_ML, N_LANES_IB, N_LANES_IB+N_LANES_ML);
   TH2F *hStatusTimeOL = new TH2F("Status vs time OL",Form("Run %d - Status vs time OL;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES-N_LANES_IB-N_LANES_ML, N_LANES_IB+N_LANES_ML, N_LANES);
 
-
+  TH1F *hStaveDeadTime = new TH1F("Stave dead time",Form("Run %d - Stave dead time;;dead time",runnumber), N_STAVES,0,N_STAVES);
+  for (int i=0; i < N_LANES; i++) hStaveDeadTime->GetXaxis()->SetBinLabel(LaneToStave[i]+1, Form("#color[%d]{L%d_%d}",1,LaneToLayer[i],LaneToStaveInLayer[i]));
+  
   
   HMAP->Clear();
   HSMAP->Clear();
@@ -296,7 +310,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       hEffIB->SetBinContent(countstep,1.*IBdead/N_LANES_IB);
     }
 
-    for (uint chip : M.second) eff[chip] += (currentorbit - previousorbit);
+    for (uint ii : M.second) eff[ii] += (currentorbit - previousorbit);
 
     // step up
     countstep++;
@@ -327,13 +341,21 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   for (uint chip : MAP.rbegin()->second) LastMAP->SetBinContent(chip+1,1); 
 
   double AvgEffIB=0, AvgEffOB=0, cib=0, cob=0; // average dead time over lanes. eff[i] is the dead time for lane i
+  double AvgEffStave[N_STAVES]; double cst[N_STAVES]; for (int i=0; i<N_STAVES;i++) AvgEffStave[i]=cst[i]=0; // average dead time staves
+  
   for (int i=0; i<nn; i++) {
-    eff[i] = (1.*eff[i]/(currentorbit-firstorbit));
+    eff[i] = (1.*eff[i]/(currentorbit-firstorbit)); // normalizing eff[i] to time
     if (i<N_LANES_IB) {AvgEffIB += eff[i]; cib+=1;}
     else {AvgEffOB += eff[i]; cob+=1;}
+    AvgEffStave[LaneToStave[i]] += eff[i];
+    cst[LaneToStave[i]] += 1;
   }
   if (cib > 0) AvgEffIB /= cib; else AvgEffIB = 1.1111;
   if (cob > 0) AvgEffOB /= cob; else AvgEffOB = 1.1111;
+  for (int i=0; i<N_STAVES; i++){
+    if (cst[i]>0) AvgEffStave[i] /= cst[i]; else AvgEffStave[i] = 1.1111;
+  }
+  
 
   QALOG<<"Average IB dead time: "<<AvgEffIB<<"\n";
   QALOG<<"Average OB dead time: "<<AvgEffOB<<"\n";
@@ -342,6 +364,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QAcheck["Avg dead time OB"] = (AvgEffOB < 0.05) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
     
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,eff[i]);
+  for (int i=0; i<N_STAVES; i++) if (AvgEffStave[i]>0) hStaveDeadTime->SetBinContent(i+1, AvgEffStave[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
   if (worstIBorbit > 0) for (uint chip : MAP[worstIBorbit]) WorstIB->SetBinContent(chip+1,1);
   WorstOB->SetTitle(Form("Worst OB, step %d = %d sec",worstOBstep,(int)((worstOBorbit-firstorbit)*89.e-6)));
@@ -482,10 +505,32 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   hStatusTimeOL->Write();
   //gPad->SetGrid(0,1);
 
+  c3->cd();
+  hStaveDeadTime->GetXaxis()->SetNdivisions(-64);
+  hStaveDeadTime->GetXaxis()->SetLabelSize(0.02);
+  hStaveDeadTime->SetMarkerStyle(20);
+  hStaveDeadTime->Draw("P");
+  TLatex latexl;
+  //latexl.SetTextAlign(23); // Center alignment
+  latexl.SetTextAngle(90); // Rotate text 90 degrees for vertical display
+  latexl.SetTextSize(0.0125); 
+  for (int i = 0; i < N_STAVES; i++) {
+        double binContent = hStaveDeadTime->GetBinContent(i+1);
+        double binCenter = hStaveDeadTime->GetBinCenter(i+1);
+        if (binContent != 0) latexl.DrawLatex(binCenter, binContent*1.03, hStaveDeadTime->GetXaxis()->GetBinLabel(i+1));      
+  }
+  hStaveDeadTime->Write();
+  gPad->SetLogy();
+  gPad->SetGrid(1,1);
+  c3->Update();
+  
+
   c1->Write();
   c2->Write();
+  c3->Write();
   c1->SaveAs(Form("%s/DeadMapQA1.png",outdir.Data()));
   c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
+  c3->SaveAs(Form("%s/DeadMapQA3.png",outdir.Data()));
 
   outroot.Close();
   
@@ -534,8 +579,14 @@ void interpolatestave(double r1, double r2, double phi1, double phi2, int z, int
   
 }
 
-void getlanecoordinates(int laneid, double *px, double *py){
+void RemoveAxis(TH2Poly *HP){
+  HP->GetXaxis()->SetLabelSize(0);
+  HP->GetXaxis()->SetTickLength(0);
+  HP->GetYaxis()->SetLabelSize(0);
+  HP->GetYaxis()->SetTickLength(0);
+}
 
+void getlanecoordinates(int laneid, double *px, double *py){
 
   int laneob = laneid - N_LANES_IB;
   int layer, staveinlayer, laneinlayer;
@@ -557,6 +608,11 @@ void getlanecoordinates(int laneid, double *px, double *py){
   
   staveinlayer = laneinlayer / (nz*nseg);
   int laneinstave = laneinlayer % (nz*nseg);
+  int stave = 0;
+  for (int l=0; l<7; l++) stave += (l<layer)*NStaves[l]+(l==layer)*staveinlayer;
+
+  LaneToStave[laneid] = stave;
+  LaneToStaveInLayer[laneid] = staveinlayer;
 
   int halfstave = (layer < 3) ? 0 : (int)( laneinstave >= nz*nsegh); // 0 or 1 
   int laneinhalfstave = laneinstave - halfstave*nz*nsegh;
