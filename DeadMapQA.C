@@ -237,7 +237,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   }
   QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
   QALOG<<"Static map: OB lanes with at least one fully dead chip: "<<nwithfullydeadOB<<"\n";
-  QAcheck["Fully dead IB"] = (nfullydeadIB == 0) ? "GOOD" : (nfullydeadIB < 4) ? "MEDIUM" : "BAD";
+  QAcheck["Fully dead IB"] = (nfullydeadIB < 2) ? "GOOD" : (nfullydeadIB < 4) ? "MEDIUM" : "BAD";
   QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";
   
 
@@ -384,7 +384,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QALOG<<"RCT run duration: "<<RCTrunduration<<". MAP duration: "<<MAPduration<<". Difference: "<<RCTrunduration - MAPduration<<" (sec)\n";
 
   QAcheck["Orbit range"] =
-    (MAPduration > RCTrunduration) ? "MEDIUM":
+    (MAPduration > RCTrunduration + 5) ? "MEDIUM":
     (MAPduration >= RCTrunduration - 5) ? "GOOD" :
     (MAPduration >= RCTrunduration - 30) ? "MEDIUM" :
     "BAD";
