@@ -392,24 +392,24 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   hTimeSpan->SetBinContent(1,RCTrunduration);
   hTimeSpan->SetBinContent(2,MAPduration);
 
-  TFile outroot(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
+  //TFile outroot(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
  
   c1->cd(1); // average evolving map
   HMAP->Draw("lcolz");
   gPad->SetLogz();
-  HMAP->Write();
+  //HMAP->Write();
   
   c1->cd(2); // static map
   HSMAP->Draw("lcolz");
   HSMAP->SetMinimum(1);
-  HSMAP->Write();
+  //HSMAP->Write();
 
   c1->cd(3);
   hTimeSpan->GetXaxis()->SetBinLabel(1,"RCT");
   hTimeSpan->GetXaxis()->SetBinLabel(2,"MAP");
   hTimeSpan->GetYaxis()->SetTitle("sec");
   hTimeSpan->Draw("histo");
-  hTimeSpan->Write();
+  //hTimeSpan->Write();
 
   c1->cd(4);
 
@@ -417,7 +417,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
   c1->cd(5); // orbit offset
   hOrb->Draw("histo");
-  hOrb->Write();
+  //hOrb->Write();
 
   c1->cd(6); // IB and OB efficiency
   hEffOB->GetXaxis()->SetTitle("step");
@@ -425,8 +425,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   hEffIB->SetLineColor(2);
   hEffIB->Draw("histo same");
   gPad->SetLogy();
-  hEffOB->Write();
-  hEffIB->Write();
+  //hEffOB->Write();
+  //hEffIB->Write();
 
   c1->cd(7); // IB and OB efficiency vs time
   TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
@@ -442,8 +442,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   gPad->SetLogy();
   grOB->SetName("Dead fraction vs time OB");
   grIB->SetName("Dead fraction vs time IB");
-  grOB->Write();
-  grIB->Write();
+  //grOB->Write();
+  //grIB->Write();
 
   c1->cd(8);
 
@@ -451,17 +451,17 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   c1->cd(9); // worst OB
   WorstOB->Draw("lcolz");
-  WorstOB->Write();
+  //WorstOB->Write();
   
   c1->cd(10); // worst IB
   WorstIB->Draw("lcolz");
-  WorstIB->Write();
+  //WorstIB->Write();
 
   c1->cd(11); // last snapshot
   LastMAP->SetTitle("Last snapshot");
   LastMAP->SetName("Last snapshot");
   LastMAP->Draw("lcolz");
-  LastMAP->Write();
+  //LastMAP->Write();
 
   c1->cd(4); // text summary
   TLatex latex;
@@ -490,19 +490,19 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c2->cd(1);
   hStatusTimeIB->GetYaxis()->SetNdivisions(0.-(N_LANES_IB/9));
   hStatusTimeIB->Draw("col");    
-  hStatusTimeIB->Write();
+  //hStatusTimeIB->Write();
   gPad->SetGrid(0,1);
 
   c2->cd(2);
   hStatusTimeML->GetYaxis()->SetNdivisions(0.-(N_LANES_ML/16));
   hStatusTimeML->Draw("col");
-  hStatusTimeML->Write();
+  //hStatusTimeML->Write();
   gPad->SetGrid(0,1);
 
   c2->cd(3);
   hStatusTimeOL->GetYaxis()->SetNdivisions(0.-(N_LANES-N_LANES_ML-N_LANES_IB/28));
   hStatusTimeOL->Draw("col");
-  hStatusTimeOL->Write();
+  //hStatusTimeOL->Write();
   //gPad->SetGrid(0,1);
 
   c3->cd();
@@ -519,20 +519,20 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
         double binCenter = hStaveDeadTime->GetBinCenter(i+1);
         if (binContent != 0) latexl.DrawLatex(binCenter, binContent*1.03, hStaveDeadTime->GetXaxis()->GetBinLabel(i+1));      
   }
-  hStaveDeadTime->Write();
+  //hStaveDeadTime->Write();
   gPad->SetLogy();
   gPad->SetGrid(1,1);
   c3->Update();
   
 
-  c1->Write();
-  c2->Write();
-  c3->Write();
+  //c1->Write();
+  //c2->Write();
+  //c3->Write();
   c1->SaveAs(Form("%s/DeadMapQA1.png",outdir.Data()));
   c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
   c3->SaveAs(Form("%s/DeadMapQA3.png",outdir.Data()));
 
-  outroot.Close();
+  //outroot.Close();
   
   QALOG<<"Orbits: "<<firstorbit<<" to "<<currentorbit<<" corrsponding to "<<(currentorbit - firstorbit)*89.e-6 / 60.<<" minutes\n";
 
