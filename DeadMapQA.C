@@ -237,7 +237,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   }
   QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
   QALOG<<"Static map: OB lanes with at least one fully dead chip: "<<nwithfullydeadOB<<"\n";
-  QAcheck["Fully dead IB"] = (nfullydeadIB < 3) ? "GOOD" : (nfullydeadIB < 9) ? "MEDIUM" : "BAD";
+  QAcheck["Fully dead IB"] = (nfullydeadIB < 9) ? "GOOD" : (1.*nfullydeadIB < 0.1*N_LANES_IB) ? "MEDIUM" : "BAD"; // 9 chips is ~2% of IB
   QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";
   
 
