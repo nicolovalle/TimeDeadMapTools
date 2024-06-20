@@ -19,6 +19,11 @@ FATAL = 'FATAL'
 DEBUG = 'DEBUG'
 
 # Usage: ./rundeadmap.py <run_number>
+# Usage: ./rundeadmap.py <run_number> newqa
+
+verbose = False
+
+rerunqa = False
 
 logfile = 'log.log'
 run = -1
@@ -28,6 +33,8 @@ bktokenfile = "token.dat"
 
 #_________________________________________________________________________________
 def LOG(severity, *message):
+    if severity == DEBUG and not verobse:
+        return
     global logfile
     filename = str(inspect.stack()[1][1])
     filename = filename.split('/')[-1]
@@ -51,7 +58,8 @@ def execute(command, log = True, severitylog = INFO):
 
 #________________________________________________________________________________
 def Exit(severitylog = INFO):
-    if os.path.exists(targetdir) and logfile != 'log.log':
+    global rerunqa
+    if os.path.exists(targetdir) and logfile != 'log.log' and not rerunqa:
         execute('mv -f '+logfile+' '+targetdir+'/main.log')
     print(severitylog,'EXITING')
     exit()
@@ -103,132 +111,153 @@ if __name__ == "__main__":
         Exit(FATAL)
 
     run = str(run)
-    logfile = run+'.log'
-
-    LOG(INFO,"Starting",sys.argv[0],sys.argv[1])
-        
     targetdir = './output/'+run
 
-    if os.path.exists(targetdir):
-        LOG(INFO,"Directory "+targetdir+" already exists. Deleting it.")
-        execute("rm -fr "+targetdir, False)
-    execute('mkdir -p '+targetdir)
+    if len(sys.argv) > 2 and str(sys.argv[2]) == 'newqa':
+        if os.path.exists('./output/'+run+'/main.log'):
+            logfile = './output/'+run+'/main.log'
+            rerunqa = True
+        else:
+            rerunqa = False
+            Exit(FATAL)          
+
+    if not rerunqa:
         
-    period, secDuration, doITS, doMFT = querylogbook(run)
+        logfile = run+'.log'
         
-    year = '20'+period[3:5]
-    LOG(INFO,"Processing run",run,"from period",period,"year",year,'. Duration(min) = ',secDuration/60)
-
-    with open(targetdir+'/period.txt','w') as f:
-        f.write(period)
-        
-    execute('alien_find /alice/data/'+year+'/'+period+'/'+run+'/raw/ o2_ctf* > '+targetdir+'/full_ctf_list.dat')
-
-    with open(targetdir+'/full_ctf_list.dat') as f:
-        tflist = f.readlines()
-
-    if len(tflist) < 3:
-        LOG(FATAL,"CTF list is too short. Run will not be processed. Exiting")
-        Exit(FATAL)
-
-    LOG(INFO,"Found:",len(tflist),"CTFs")
-
-
-    try:
-        epnlist = [ re.search('epn[0-9]{3}', l).group(0) for l in tflist]
-    except Exception as e:
-        LOG(FATAL,"Failing in extracting EPN list",e)
-        Exit(FATAL)
-
-    targetEPN = max(set(epnlist), key=epnlist.count)
-
-    LOG(INFO,"Choosing epn",targetEPN,"producing",epnlist.count(targetEPN),"CTFs, and adding first and last file.")
-
-    ctflist = targetdir+'/alien_ctf_'+targetEPN+'.dat'
-    execute('head -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" > '+ctflist)
-    execute('grep '+targetEPN+' '+targetdir+'/full_ctf_list.dat | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
-    execute('tail -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
-
-    with open(ctflist, 'r') as ctfile:
-        line_count = sum(1 for line in ctfile)
-        LOG(INFO,'Number of files going to be processed:',line_count)
-
-    wflog = targetdir+'/o2-deadmapbuilder.log'
-    wferr = targetdir+'/o2-deadmapbuilder.err'
-    LOG(INFO,"Executing workflow. std out, std err:",wflog,",",wferr)
-
-    tflen = 128 if int(year)<2023 else 32
-
-    LOG(INFO,'Using TF length =',tflen,'orbits')
-    
-    ITSMFTcommand = 'o2-ctf-reader-workflow -b --ctf-input '+ctflist+' --remote-regex "^alien:///alice/data/.+" --copy-cmd no-copy --onlyDet ITS,MFT --shm-segment-size 40000000000 | o2-itsmft-deadmap-builder-workflow --local-output --output-dir '+targetdir+' --source clusters --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b | o2-itsmft-deadmap-builder-workflow --runmft --local-output --output-dir '+targetdir+' --source clusters --skip-static-map --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b --run > '+wflog+' 2>'+wferr
-
-    ITScommand = 'o2-ctf-reader-workflow -b --ctf-input '+ctflist+' --remote-regex "^alien:///alice/data/.+" --copy-cmd no-copy --onlyDet ITS --shm-segment-size 40000000000 | o2-itsmft-deadmap-builder-workflow --local-output --output-dir '+targetdir+' --source clusters --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b --run > '+wflog+' 2>'+wferr
- 
-    t__start = time.time()
-    if doITS and doMFT:
-        execute(ITSMFTcommand)
-    elif doITS:
-        execute(ITScommand)
-    else:
-        LOG(FATAL,'ITS is not in the run, doing nothing')
-        Exit(FATAL)
-    t__stop = time.time()
-
-    LOG(INFO,"Process took",round(t__stop - t__start,2),"sec.",round((t__stop-t__start)/60.,2),"min.")
-
-    LOG(INFO,"Checking orbit uniformity")
-
-    with open(wferr) as f:
-        errlines = f.readlines()
-        if len(errlines) > 0:
-            LOG(ERROR,'There are errors in the std err')
+        LOG(INFO,"Starting",sys.argv[0],sys.argv[1])
             
-    with open(wflog) as f:
-        loglines = f.readlines()
+        
+        if os.path.exists(targetdir):
+            LOG(INFO,"Directory "+targetdir+" already exists. Deleting it.")
+            execute("rm -fr "+targetdir, False)
+        execute('mkdir -p '+targetdir)
+            
+        period, secDuration, doITS, doMFT = querylogbook(run)
+            
+        year = '20'+period[3:5]
+        LOG(INFO,"Processing run",run,"from period",period,"year",year,'. Duration(min) = ',secDuration/60)
+        
+        with open(targetdir+'/period.txt','w') as f:
+            f.write(period)
+            
+        execute('alien_find /alice/data/'+year+'/'+period+'/'+run+'/raw/ o2_ctf* > '+targetdir+'/full_ctf_list.dat')
+        
+        with open(targetdir+'/full_ctf_list.dat') as f:
+            tflist = f.readlines()
+        
+        if len(tflist) < 3:
+            LOG(FATAL,"CTF list is too short. Run will not be processed. Exiting")
+            Exit(FATAL)
+        
+        LOG(INFO,"Found:",len(tflist),"CTFs")
+        
+        
+        try:
+            epnlist = [ re.search('epn[0-9]{3}', l).group(0) for l in tflist]
+        except Exception as e:
+            LOG(FATAL,"Failing in extracting EPN list",e)
+            Exit(FATAL)
+        
+        targetEPN = max(set(epnlist), key=epnlist.count)
+        
+        LOG(INFO,"Choosing epn",targetEPN,"producing",epnlist.count(targetEPN),"CTFs, and adding first and last file.")
+        
+        ctflist = targetdir+'/alien_ctf_'+targetEPN+'.dat'
+        execute('head -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" > '+ctflist)
+        execute('grep '+targetEPN+' '+targetdir+'/full_ctf_list.dat | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
+        execute('tail -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
+        
+        with open(ctflist, 'r') as ctfile:
+            line_count = sum(1 for line in ctfile)
+            LOG(INFO,'Number of files going to be processed:',line_count)
+        
+        wflog = targetdir+'/o2-deadmapbuilder.log'
+        wferr = targetdir+'/o2-deadmapbuilder.err'
+        LOG(INFO,"Executing workflow. std out, std err:",wflog,",",wferr)
+        
+        tflen = 128 if int(year)<2023 else 32
+        
+        LOG(INFO,'Using TF length =',tflen,'orbits')
+        
+        ITSMFTcommand = 'o2-ctf-reader-workflow -b --ctf-input '+ctflist+' --remote-regex "^alien:///alice/data/.+" --copy-cmd no-copy --onlyDet ITS,MFT --shm-segment-size 40000000000 | o2-itsmft-deadmap-builder-workflow --local-output --output-dir '+targetdir+' --source clusters --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b | o2-itsmft-deadmap-builder-workflow --runmft --local-output --output-dir '+targetdir+' --source clusters --skip-static-map --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b --run > '+wflog+' 2>'+wferr
+        
+        ITScommand = 'o2-ctf-reader-workflow -b --ctf-input '+ctflist+' --remote-regex "^alien:///alice/data/.+" --copy-cmd no-copy --onlyDet ITS --shm-segment-size 40000000000 | o2-itsmft-deadmap-builder-workflow --local-output --output-dir '+targetdir+' --source clusters --tf-sampling 1 --tf-length '+str(tflen)+' --shm-segment-size 4000000000 -b --run > '+wflog+' 2>'+wferr
+        
+        t__start = time.time()
+        if doITS and doMFT:
+            execute(ITSMFTcommand)
+        elif doITS:
+            execute(ITScommand)
+        else:
+            LOG(FATAL,'ITS is not in the run, doing nothing')
+            Exit(FATAL)
+        t__stop = time.time()
+        
+        LOG(INFO,"Process took",round(t__stop - t__start,2),"sec.",round((t__stop-t__start)/60.,2),"min.")
+        
+        LOG(INFO,"Cheking orbit uniformity")
+        
+        with open(wferr) as f:
+            errlines = f.readlines()
+            if len(errlines) > 0:
+                LOG(ERROR,'There are errors in the std err')
+                
+        with open(wflog) as f:
+            loglines = f.readlines()
+        
+        orbits = []
+        for ll in loglines:
+            if 'TF received. First orbit' in ll and 'deadmap-builder_its' in ll:
+                orbits.append(int(re.search('First orbit [0-9]+',ll).group(0).replace('First orbit','')))
+        
+        if len(orbits) == 0:
+            LOG(FATAL,"No good workflow output, exiting")
+            Exit(FATAL)
+        
+        for ll in loglines:
+            if 'ERROR' in ll or 'Error' in ll:
+                LOG(ERROR,'There are ERRORS in wf stdout')
+                break
+        
+        orbits.sort()
+        
+        orbgap = [orbits[i+1] - orbits[i] for i in range(len(orbits)-1)]
+        step = [i+1 for i in range(len(orbits)-1)]
+        
+        plt.plot(orbgap,'o-r')
+        plt.savefig(targetdir+'/orbits.png')
+        
+        OrbitRangeSec = (orbits[-1]-orbits[0])*89.e-6
+        LOG(INFO,"Number of TFs:",len(orbits)," Orbit range",orbits[0],":",orbits[-1]," corresponding to ",OrbitRangeSec/60,"min")
+        if abs(OrbitRangeSec - secDuration) > 30:
+            LOG(DEBUG,'Big difference between range in the map (',OrbitRangeSec,' s) and run duration (',secDuration,' s)')
+        sevcheck = INFO
+        sigmaorb = statistics.pstdev(orbgap)
+        if max(orbgap) > 320000:
+            sevcheck = ERROR
+        elif max(orbgap) > 32000:
+            sevcheck = WARNING
+        LOG(sevcheck,"Max orbit gap:",max(orbgap),"Min orbit gap:",min(orbgap),"Std orbit gap:",sigmaorb)
+        LOG(INFO,targetdir+'/orbits.png created.')
+        LOG(INFO,'Run',run,'completed. Running QA on object. Setting timeout = 120 sec')
 
-    orbits = []
-    for ll in loglines:
-        if 'TF received. First orbit' in ll and 'deadmap-builder_its' in ll:
-            orbits.append(int(re.search('First orbit [0-9]+',ll).group(0).replace('First orbit','')))
-
-    if len(orbits) == 0:
-        LOG(FATAL,"No good workflow output, exiting")
-        Exit(FATAL)
-
-    for ll in loglines:
-        if 'ERROR' in ll or 'Error' in ll:
-            LOG(ERROR,'There are ERRORS in wf stdout')
-            break
-
-    orbits.sort()
-
-    orbgap = [orbits[i+1] - orbits[i] for i in range(len(orbits)-1)]
-    step = [i+1 for i in range(len(orbits)-1)]
-
-    plt.plot(orbgap,'o-r')
-    plt.savefig(targetdir+'/orbits.png')
-
-    OrbitRangeSec = (orbits[-1]-orbits[0])*89.e-6
-    LOG(INFO,"Number of TFs:",len(orbits)," Orbit range",orbits[0],":",orbits[-1]," corresponding to ",OrbitRangeSec/60,"min")
-    if abs(OrbitRangeSec - secDuration) > 30:
-        LOG(ERROR,'Big difference between range in the map (',OrbitRangeSec,' s) and run duration (',secDuration,' s)')
-    sevcheck = INFO
-    sigmaorb = statistics.pstdev(orbgap)
-    if max(orbgap) > 320000:
-        sevcheck = ERROR
-    elif max(orbgap) > 32000:
-        sevcheck = WARNING
-    LOG(sevcheck,"Max orbit gap:",max(orbgap),"Min orbit gap:",min(orbgap),"Std orbit gap:",sigmaorb)
-    LOG(INFO,targetdir+'/orbits.png created.')
-    LOG(INFO,'Run',run,'completed. Running QA on object. Setting timeout = 60 sec')
-
+            
     try:
+            
+        if rerunqa:
+            LOG(INFO,'Rerunning QA for run',run)
+            bkqadir = targetdir+'/ITSQA_backup/'
+            qadir = targetdir+'/ITSQA/'
+            if os.path.exists(bkqadir):
+                execute('rm -fr '+bkqadir)
+            if os.path.exists(qadir):
+                execute('mv '+qadir[:-1]+' '+bkqadir[:-1])
         
         execute('mkdir '+targetdir+'/ITSQA/')
         rootcommand = ['root', '-b', 'DeadMapQA.C("'+targetdir+'/its_time_deadmap.root",'+str(run)+',"'+targetdir+'/ITSQA/")']
         process = subprocess.Popen(rootcommand, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdout, stderr = process.communicate(timeout=60)
+        stdout, stderr = process.communicate(timeout=120)
 
         with open(targetdir+'/ITSQA/root.log','w') as fqa:
             fqa.write('========\n stderr \n========\n')
