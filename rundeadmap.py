@@ -33,7 +33,7 @@ bktokenfile = "token.dat"
 
 #_________________________________________________________________________________
 def LOG(severity, *message):
-    if severity == DEBUG and not verobse:
+    if severity == DEBUG and not verbose:
         return
     global logfile
     filename = str(inspect.stack()[1][1])
