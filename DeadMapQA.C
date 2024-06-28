@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <TBufferJSON.h>
+#include <TH1.h>
 #include <TH2.h>
 #include <THnSparse.h>
 #include <TFile.h>
@@ -63,6 +64,7 @@ Logger QALOG;
 const int NStaves[7] = { 12, 16, 20, 24, 30, 42, 48 };
 const int NZElementsInHalfStave[7] =  {9,9,9, 4, 4, 7, 7};
 const int NSegmentsStave[7] = {1, 1, 1, 4, 4, 4, 4};
+const int NLanesPerStave[7] = {9, 9, 9, 16, 16, 28, 28};
 const int N_LANES_IB = 432;
 const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
@@ -71,6 +73,7 @@ const int N_STAVES = 192;
 int LaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
 int LaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
 int LaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
+int LaneToLaneInLayer[N_LANES]; // filled by "getlanecoordinates" when called
 
 float LHCOrbitNS = 88924.6; // o2::constants::lhc::LHCOrbitNS
 
@@ -150,6 +153,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   TCanvas *c3 = new TCanvas("QAsummary3","QAsummary3",4000,1500);
 
+  TCanvas *c4 = new TCanvas("QAsummary4","QAsummary4",1200,4200);
+  c4->Divide(1,7);
+
+  
   gStyle->SetOptStat(0);
   gStyle->SetPalette(kBlackBody);
   TColor::InvertPalette();
@@ -173,9 +180,14 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
 
   QAcheck["Chip interval"] = "GOOD";
+
+  /*****************/
+  /*****************/
   fillmap(FILENAME); // fill both MAP and SMAP, checking them. Exit if map is empty or default.
+  /*****************/
+  /*****************/
   
-  TH1F *hOrb = new TH1F("Orbits gap","Orbits gap",MAP.size()-1,1,MAP.size());
+  TH1F *hOrb = new TH1F("Orbits gap","Orbits gap;step;Delta(orbit) from previous step",MAP.size()-1,1,MAP.size());
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hTimeSpan = new TH1F("Time range","Time range",2,0,2);
@@ -189,14 +201,17 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   TH1F *hStaveDeadTime = new TH1F("Stave dead time",Form("Run %d - Stave dead time;;dead time",runnumber), N_STAVES,0,N_STAVES);
   for (int i=0; i < N_LANES; i++) hStaveDeadTime->GetXaxis()->SetBinLabel(LaneToStave[i]+1, Form("#color[%d]{L%d_%d}",1,LaneToLayer[i],LaneToStaveInLayer[i]));
+
+  std::vector<TH1F*> hhLaneDeadTime;
+  for (int il = 0; il<7; il++){
+    hhLaneDeadTime.push_back(new TH1F(Form("Lane dead time L%d",il),Form("Run %d - layer %d;lane (stave number on the axis);dead time",runnumber,il), NStaves[il]*NLanesPerStave[il], 0, NStaves[il]*NLanesPerStave[il]));
+  }
   
   
   HMAP->Clear();
   HSMAP->Clear();
   HMAP->SetTitle("Lane dead time"); HMAP->SetName("Lane dead time");
   HSMAP->SetTitle("Number of fully dead chips in the lane"); HSMAP->SetName("Number of fully dead chips in the lane");
-  hOrb->GetXaxis()->SetTitle("step");
-  hOrb->GetYaxis()->SetTitle("Delta(orbit) from previous step");
   WorstOB->Clear();
   WorstIB->Clear();
    
@@ -220,12 +235,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   for (int i =0 ; i<nn; i++) eff[i]=effstat[i]=0;
 
   for (auto c : SMAP){
-    //cout<<"DEBUG Incrementing static map counter chip / lane "<<c<<"/"<<ChipToLane(c);
     effstat[ChipToLane(c)]+=1;
   }
 
   for (int i = 0; i<nn; i++) {
-    //cout<<"DEBUG bin "<<i+1<<" content "<<effstat[i];
     HSMAP->SetBinContent(i+1,effstat[i]);
   }
 
@@ -235,11 +248,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     if (effstat[i] > 0 && i < N_LANES_IB) nfullydeadIB++;
     if (effstat[i] > 0 && i >= N_LANES_IB) nwithfullydeadOB++;
   }
+  
   QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
   QALOG<<"Static map: OB lanes with at least one fully dead chip: "<<nwithfullydeadOB<<"\n";
   QAcheck["Fully dead IB"] = (nfullydeadIB < 9) ? "GOOD" : (1.*nfullydeadIB < 0.1*N_LANES_IB) ? "MEDIUM" : "BAD"; // 9 chips is ~2% of IB
-  QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";
-  
+  QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";  
 
 
   int worstOBcount = -1, worstIBcount = -1;
@@ -249,7 +262,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   double TimeStampFromStart[NSteps];
   double BarrelEfficiency[2][NSteps];
 
-  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * 89.e-6; 
+  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * 89.e-6;
+  
   QALOG<<"Orbit range "<<MAP.begin()->first<<" to "<<MAP.rbegin()->first<<" , in seconds: "<<maprange<<"\n";
   
   for (auto M : MAP){
@@ -274,8 +288,6 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
     TimeStampFromStart[countstep] = (currentorbit - firstorbit) * LHCOrbitNS * 1.e-9;
     
-
-    //if (M.second.size() > 50) cout<<"DEBUG Step "<<countstep<<"/"<<NSteps<<". Orbit = "<<M.first<<" dead lanes: "<<M.second.size();
 
     int OBdead = 0, IBdead = 0;
     for (int il = 0; il<2; il++) BarrelEfficiency[il][countstep] = 0.;
@@ -362,7 +374,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   QAcheck["Avg dead time IB"] = (AvgEffIB < 0.03) ? "GOOD" : (AvgEffIB < 0.10) ? "MEDIUM" : "BAD";
   QAcheck["Avg dead time OB"] = (AvgEffOB < 0.05) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
-    
+
+  for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer[i]]->SetBinContent(LaneToLaneInLayer[i],eff[i]);
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,eff[i]);
   for (int i=0; i<N_STAVES; i++) if (AvgEffStave[i]>0) hStaveDeadTime->SetBinContent(i+1, AvgEffStave[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
@@ -523,6 +536,20 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   gPad->SetLogy();
   gPad->SetGrid(1,1);
   c3->Update();
+
+  for (int illlay = 0; illlay < 7; illlay ++){
+    c4->cd(illlay+1);
+    //int illlay = 0;
+    hhLaneDeadTime[illlay]->GetXaxis()->SetNdivisions(NStaves[illlay]+1);
+    for (int i=0; i<NStaves[illlay]; i++){
+      hhLaneDeadTime[illlay]->GetXaxis()->SetBinLabel(NLanesPerStave[illlay]*i+1,Form("%d",i));
+    }
+    hhLaneDeadTime[illlay]->Draw("histo");
+    gPad->SetGrid(1,0);
+    gPad->SetLogy();
+  }
+  
+  
   
 
   //c1->Write();
@@ -531,6 +558,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c1->SaveAs(Form("%s/DeadMapQA1.png",outdir.Data()));
   c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
   c3->SaveAs(Form("%s/DeadMapQA3.png",outdir.Data()));
+  c4->SaveAs(Form("%s/DeadMapQA4.png",outdir.Data()));
+  
 
   //outroot.Close();
   
@@ -600,19 +629,22 @@ void getlanecoordinates(int laneid, double *px, double *py){
   else { layer = 6; laneinlayer = laneob - (24+30)*4*4 - 42*7*4;}
 
   LaneToLayer[laneid] = layer;
+  LaneToLaneInLayer[laneid] = laneinlayer;
 
   int nz = NZElementsInHalfStave[layer];
   int nseg = NSegmentsStave[layer];
   int nsegh = (nseg == 1) ? 1 : nseg/2;
-
   
   staveinlayer = laneinlayer / (nz*nseg);
   int laneinstave = laneinlayer % (nz*nseg);
+  
   int stave = 0;
   for (int l=0; l<7; l++) stave += (l<layer)*NStaves[l]+(l==layer)*staveinlayer;
 
   LaneToStave[laneid] = stave;
   LaneToStaveInLayer[laneid] = staveinlayer;
+
+  
 
   int halfstave = (layer < 3) ? 0 : (int)( laneinstave >= nz*nsegh); // 0 or 1 
   int laneinhalfstave = laneinstave - halfstave*nz*nsegh;
