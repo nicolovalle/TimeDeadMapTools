@@ -33,7 +33,7 @@ using namespace TMath;
 /// settings
 TString InputFile = "dmap.root";  // can be changed as argument of the macro
 TString logfilename = "DeadMapQA.log";
-double SecForWorse = 15;
+double SecForTrgRamp = 15;
 bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 32000;
@@ -190,7 +190,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH1F *hOrb = new TH1F("Orbits gap","Orbits gap;step;Delta(orbit) from previous step",MAP.size()-1,1,MAP.size());
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
-  TH1F *hTimeSpan = new TH1F("Time range","Time range",2,0,2);
+  TH1F *hTimeSpan = new TH1F("Time range","Time range;;sec",2,0,2);
 
   const Int_t hInbin = MAP.size()-1;
   Double_t hIbins[hInbin+1];
@@ -204,7 +204,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   std::vector<TH1F*> hhLaneDeadTime;
   for (int il = 0; il<7; il++){
-    hhLaneDeadTime.push_back(new TH1F(Form("Lane dead time L%d",il),Form("Run %d - layer %d;lane (stave number on the axis);dead time",runnumber,il), NStaves[il]*NLanesPerStave[il], 0, NStaves[il]*NLanesPerStave[il]));
+    hhLaneDeadTime.push_back(new TH1F(Form("Lane dead time L%d",il),Form("Run %d - layer %d;lane (stave number on the axis);dead time (> %d sec)",runnumber,il,(int)SecForTrgRamp), NStaves[il]*NLanesPerStave[il], 0, NStaves[il]*NLanesPerStave[il]));
   }
   
   
@@ -231,22 +231,22 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   const int nn = N_LANES;
 
-  double eff[nn], effstat[nn];
-  for (int i =0 ; i<nn; i++) eff[i]=effstat[i]=0;
+  double dtimeLane[nn], dtimeLaneNoRamp[nn], deadStat[nn];
+  for (int i =0 ; i<nn; i++) dtimeLane[i]=dtimeLaneNoRamp[i]=deadStat[i]=0;
 
   for (auto c : SMAP){
-    effstat[ChipToLane(c)]+=1;
+    deadStat[ChipToLane(c)]+=1;
   }
 
   for (int i = 0; i<nn; i++) {
-    HSMAP->SetBinContent(i+1,effstat[i]);
+    HSMAP->SetBinContent(i+1,deadStat[i]);
   }
 
   int nfullydeadIB = 0;
   int nwithfullydeadOB = 0;
   for (int i=0; i<nn; i++){
-    if (effstat[i] > 0 && i < N_LANES_IB) nfullydeadIB++;
-    if (effstat[i] > 0 && i >= N_LANES_IB) nwithfullydeadOB++;
+    if (deadStat[i] > 0 && i < N_LANES_IB) nfullydeadIB++;
+    if (deadStat[i] > 0 && i >= N_LANES_IB) nwithfullydeadOB++;
   }
   
   QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
@@ -262,7 +262,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   double TimeStampFromStart[NSteps];
   double BarrelEfficiency[2][NSteps];
 
-  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * 89.e-6;
+  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * LHCOrbitNS * 1.e-9;
   
   QALOG<<"Orbit range "<<MAP.begin()->first<<" to "<<MAP.rbegin()->first<<" , in seconds: "<<maprange<<"\n";
   
@@ -304,7 +304,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       BarrelEfficiency[ibarrel][countstep] += 1./((ibarrel <1) ? N_LANES_IB : (N_LANES - N_LANES_IB));
     }
 
-    if ( (maprange < SecForWorse) || (currentorbit - firstorbit)*89.e-6 > SecForWorse ){ // save worst cases after SecForWorse seconds if the map lasts at least SecForWorse seconds
+    if ( (maprange < SecForTrgRamp) || TimeStampFromStart[countstep] > SecForTrgRamp ){ // save worst cases after SecForTrgRamp seconds if the map lasts at least SecForTrgRamp seconds
       if (OBdead > worstOBcount){
 	worstOBstep = countstep;
 	worstOBorbit = currentorbit;
@@ -322,7 +322,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       hEffIB->SetBinContent(countstep,1.*IBdead/N_LANES_IB);
     }
 
-    for (uint ii : M.second) eff[ii] += (currentorbit - previousorbit);
+    for (uint ii : M.second) {
+      dtimeLane[ii] += (currentorbit - previousorbit);
+      if (TimeStampFromStart[countstep] > SecForTrgRamp) dtimeLaneNoRamp[ii] += (currentorbit - previousorbit);
+    }
 
     // step up
     countstep++;
@@ -342,42 +345,48 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   QAcheck["Un-anchorable fraction"] = (unAnchorableFrac < 0.02) ? "GOOD" : (unAnchorableFrac < 0.05) ? "MEDIUM" : "BAD";
 
-  QALOG<<"Worst cases computed skipping first "<<SecForWorse<<" seconds.\n";
+  QALOG<<"Worst cases computed skipping first "<<SecForTrgRamp<<" seconds.\n";
   QALOG<<"Worst OB case: orbit "<<worstOBorbit<<" step #"<<worstOBstep<<" dead lanes "<<worstOBcount<<"\n";
   QALOG<<"Worst IB case: orbit "<<worstIBorbit<<" step #"<<worstIBstep<<" dead lanes "<<worstIBcount<<"\n";
 
   if ((MAP.begin()->first != firstorbit) || (MAP.rbegin()->first != currentorbit)){
     QALOG<<"ERROR after checking the map the first and last orbit don't match\n";
   }
+  
 
   for (uint chip : MAP.rbegin()->second) LastMAP->SetBinContent(chip+1,1); 
 
-  double AvgEffIB=0, AvgEffOB=0, cib=0, cob=0; // average dead time over lanes. eff[i] is the dead time for lane i
-  double AvgEffStave[N_STAVES]; double cst[N_STAVES]; for (int i=0; i<N_STAVES;i++) AvgEffStave[i]=cst[i]=0; // average dead time staves
+  double dtimeIB=0, dtimeOB=0, cib=0, cob=0; // average dead time over lanes. dtimeLane[i] is the dead time for lane i
+  double dtimeStave[N_STAVES]; double cst[N_STAVES]; for (int i=0; i<N_STAVES;i++) dtimeStave[i]=cst[i]=0; // average dead time staves
   
   for (int i=0; i<nn; i++) {
-    eff[i] = (1.*eff[i]/(currentorbit-firstorbit)); // normalizing eff[i] to time
-    if (i<N_LANES_IB) {AvgEffIB += eff[i]; cib+=1;}
-    else {AvgEffOB += eff[i]; cob+=1;}
-    AvgEffStave[LaneToStave[i]] += eff[i];
+    
+    dtimeLane[i] = LHCOrbitNS * 1.e-9*(1.*dtimeLane[i]/maprange); // normalizing dtimeLane[i] to time
+    
+    dtimeLaneNoRamp[i] = (maprange > SecForTrgRamp) ? LHCOrbitNS * 1.e-9*(1.*dtimeLaneNoRamp[i]/(maprange-SecForTrgRamp)) : 0;
+    
+    if (i<N_LANES_IB) {dtimeIB += dtimeLane[i]; cib+=1;}
+    else {dtimeOB += dtimeLane[i]; cob+=1;}
+    dtimeStave[LaneToStave[i]] += dtimeLane[i];
     cst[LaneToStave[i]] += 1;
+    
   }
-  if (cib > 0) AvgEffIB /= cib; else AvgEffIB = 1.1111;
-  if (cob > 0) AvgEffOB /= cob; else AvgEffOB = 1.1111;
+  if (cib > 0) dtimeIB /= cib; else dtimeIB = 1.1111;
+  if (cob > 0) dtimeOB /= cob; else dtimeOB = 1.1111;
   for (int i=0; i<N_STAVES; i++){
-    if (cst[i]>0) AvgEffStave[i] /= cst[i]; else AvgEffStave[i] = 1.1111;
+    if (cst[i]>0) dtimeStave[i] /= cst[i]; else dtimeStave[i] = 1.1111;
   }
   
 
-  QALOG<<"Average IB dead time: "<<AvgEffIB<<"\n";
-  QALOG<<"Average OB dead time: "<<AvgEffOB<<"\n";
+  QALOG<<"Average IB dead time: "<<dtimeIB<<"\n";
+  QALOG<<"Average OB dead time: "<<dtimeOB<<"\n";
 
-  QAcheck["Avg dead time IB"] = (AvgEffIB < 0.03) ? "GOOD" : (AvgEffIB < 0.10) ? "MEDIUM" : "BAD";
-  QAcheck["Avg dead time OB"] = (AvgEffOB < 0.05) ? "GOOD" : (AvgEffOB < 0.10) ? "MEDIUM" : "BAD";
+  QAcheck["Avg dead time IB"] = (dtimeIB < 0.03) ? "GOOD" : (dtimeIB < 0.10) ? "MEDIUM" : "BAD";
+  QAcheck["Avg dead time OB"] = (dtimeOB < 0.05) ? "GOOD" : (dtimeOB < 0.10) ? "MEDIUM" : "BAD";
 
-  for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer[i]]->SetBinContent(LaneToLaneInLayer[i],eff[i]);
-  for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,eff[i]);
-  for (int i=0; i<N_STAVES; i++) if (AvgEffStave[i]>0) hStaveDeadTime->SetBinContent(i+1, AvgEffStave[i]);
+  for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer[i]]->SetBinContent(LaneToLaneInLayer[i]+1,dtimeLaneNoRamp[i]);
+  for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,dtimeLane[i]);
+  for (int i=0; i<N_STAVES; i++) if (dtimeStave[i]>0) hStaveDeadTime->SetBinContent(i+1, dtimeStave[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
   if (worstIBorbit > 0) for (uint chip : MAP[worstIBorbit]) WorstIB->SetBinContent(chip+1,1);
   WorstOB->SetTitle(Form("Worst OB, step %d = %d sec",worstOBstep,(int)((worstOBorbit-firstorbit)*89.e-6)));
@@ -420,8 +429,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c1->cd(3);
   hTimeSpan->GetXaxis()->SetBinLabel(1,"RCT");
   hTimeSpan->GetXaxis()->SetBinLabel(2,"MAP");
-  hTimeSpan->GetYaxis()->SetTitle("sec");
-  hTimeSpan->Draw("histo");
+  hTimeSpan->Draw("histo text");
   //hTimeSpan->Write();
 
   c1->cd(4);
@@ -537,16 +545,22 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   gPad->SetGrid(1,1);
   c3->Update();
 
+  std::vector<TLine*> p4lines;
   for (int illlay = 0; illlay < 7; illlay ++){
     c4->cd(illlay+1);
     //int illlay = 0;
     hhLaneDeadTime[illlay]->GetXaxis()->SetNdivisions(NStaves[illlay]+1);
     for (int i=0; i<NStaves[illlay]; i++){
-      hhLaneDeadTime[illlay]->GetXaxis()->SetBinLabel(NLanesPerStave[illlay]*i+1,Form("%d",i));
+      hhLaneDeadTime[illlay]->GetXaxis()->SetBinLabel(NLanesPerStave[illlay]*i+5,Form("%d",i));
     }
     hhLaneDeadTime[illlay]->Draw("histo");
-    gPad->SetGrid(1,0);
     gPad->SetLogy();
+    for (int i=0; i<NStaves[illlay]; i++){
+      p4lines.push_back(new TLine(NLanesPerStave[illlay]*i,hhLaneDeadTime[illlay]->GetMinimum(),NLanesPerStave[illlay]*i,hhLaneDeadTime[illlay]->GetMaximum()));
+      p4lines[p4lines.size()-1]->SetLineColor(15);
+      p4lines[p4lines.size()-1]->Draw("same");			
+    }
+    
   }
   
   
