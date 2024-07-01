@@ -195,9 +195,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   const Int_t hInbin = MAP.size()-1;
   Double_t hIbins[hInbin+1];
   for (int i=0; i < hInbin+1; i++) hIbins[i] = (Double_t)MAPKeys[i];
-  TH2F *hStatusTimeIB = new TH2F("Status vs time IB",Form("Run %d - Status vs time IB;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES_IB, 0, N_LANES_IB);
-  TH2F *hStatusTimeML = new TH2F("Status vs time ML",Form("Run %d - Status vs time ML;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES_ML, N_LANES_IB, N_LANES_IB+N_LANES_ML);
-  TH2F *hStatusTimeOL = new TH2F("Status vs time OL",Form("Run %d - Status vs time OL;Orbit;lane ID",runnumber), hInbin, hIbins, N_LANES-N_LANES_IB-N_LANES_ML, N_LANES_IB+N_LANES_ML, N_LANES);
+  TH2F *hStatusTimeIB = new TH2F("Status vs time IB",Form("Run %d - Status vs time IB;Orbit;lane (stave number on the axis)",runnumber), hInbin, hIbins, N_LANES_IB, 0, N_LANES_IB);
+  TH2F *hStatusTimeML = new TH2F("Status vs time ML",Form("Run %d - Status vs time ML;Orbit;lane (stave number on the axis)",runnumber), hInbin, hIbins, N_LANES_ML, N_LANES_IB, N_LANES_IB+N_LANES_ML);
+  TH2F *hStatusTimeOL = new TH2F("Status vs time OL",Form("Run %d - Status vs time OL;Orbit;lane (stave number on the axis)",runnumber), hInbin, hIbins, N_LANES-N_LANES_IB-N_LANES_ML, N_LANES_IB+N_LANES_ML, N_LANES);
 
   TH1F *hStaveDeadTime = new TH1F("Stave dead time",Form("Run %d - Stave dead time;;dead time",runnumber), N_STAVES,0,N_STAVES);
   for (int i=0; i < N_LANES; i++) hStaveDeadTime->GetXaxis()->SetBinLabel(LaneToStave[i]+1, Form("#color[%d]{L%d_%d}",1,LaneToLayer[i],LaneToStaveInLayer[i]));
@@ -508,23 +508,41 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     latex.DrawLatex(0.1,yPos,Form("%s : %s",cc.first.Data(),cc.second.Data()));
   }
 
+  std::vector<TLine*> p2lines;
   c2->cd(1);
-  hStatusTimeIB->GetYaxis()->SetNdivisions(0.-(N_LANES_IB/9));
   hStatusTimeIB->Draw("col");    
+  for (int i=0; i < N_LANES_IB; i+=9){
+    hStatusTimeIB->GetYaxis()->SetBinLabel(i+5,Form("%d",LaneToStaveInLayer[i]));
+    p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
+    p2lines[p2lines.size()-1]->SetLineColor(15);
+    p2lines[p2lines.size()-1]->Draw("same");
+  }
+  hStatusTimeIB->GetYaxis()->SetTickLength(0);
   //hStatusTimeIB->Write();
-  gPad->SetGrid(0,1);
+ 
 
   c2->cd(2);
-  hStatusTimeML->GetYaxis()->SetNdivisions(0.-(N_LANES_ML/16));
   hStatusTimeML->Draw("col");
+  for (int i=N_LANES_IB; i < N_LANES_IB+N_LANES_ML; i+=16){
+    hStatusTimeML->GetYaxis()->SetBinLabel(i-N_LANES_IB+8,Form("%d",LaneToStaveInLayer[i]));
+    p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
+    p2lines[p2lines.size()-1]->SetLineColor(15);
+    p2lines[p2lines.size()-1]->Draw("same");
+  }
+  hStatusTimeML->GetYaxis()->SetTickLength(0);
   //hStatusTimeML->Write();
-  gPad->SetGrid(0,1);
 
   c2->cd(3);
-  hStatusTimeOL->GetYaxis()->SetNdivisions(0.-(N_LANES-N_LANES_ML-N_LANES_IB/28));
   hStatusTimeOL->Draw("col");
+  for (int i=N_LANES_IB+N_LANES_ML; i < N_LANES; i+=28){
+    hStatusTimeOL->GetYaxis()->SetBinLabel(i-N_LANES_IB-N_LANES_ML+14,Form("%d",LaneToStaveInLayer[i]));
+    p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
+    p2lines[p2lines.size()-1]->SetLineColor(15);
+    p2lines[p2lines.size()-1]->Draw("same");
+  }
+  hStatusTimeOL->GetYaxis()->SetTickLength(0);
   //hStatusTimeOL->Write();
-  //gPad->SetGrid(0,1);
+  
 
   c3->cd();
   hStaveDeadTime->GetXaxis()->SetNdivisions(-64);
