@@ -11,6 +11,7 @@ Write your token in a file named `token.dat`.
 
 In you working directory you must have:
 + `rundeadmap.py`
++ `mylogger.py`
 + `DeadMapQA.C`
 + `Logger.h`
 + `token.dat`
@@ -79,7 +80,7 @@ Description of the output:
 
 The main script log contains a summary of the full process. It checks the O2 workflow logs, the orbits gap in the map, the map duration compared to run duration and the presence of BAD quality spotted by the root QA macro. Therefore:
 
-+ Just `grep` the strings "WARNING", "ERROR" or "FATAL" in the main script logs! If nothing is found, most probably everything is good.
++ Just `grep` the strings "WARN", "ERROR" or "FATAL" in the main script logs! If nothing is found, most probably everything is good.
 
 None of the main script logs should remain in the working dir (`<run_number>.log`). If this happens, the script crashed or failed in an unexpected way.
 
@@ -89,11 +90,3 @@ If bad quality of the QA output is reported, the details are in the last lines o
 ## More details...
 
 to be completed 
-
-## Extra/temporary
-
-We are interested in finding runs where the EOR significantly exceeds the compressed data on disk because e.g. run crash. A signature for this is a missing EOX in the RCT ccdb object. To find them, look for the following message in the `root.log` file:
-
-```
-[WARN]  | Missing/invalid EOX -> use EOR
-```

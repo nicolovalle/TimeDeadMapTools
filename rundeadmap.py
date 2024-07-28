@@ -11,12 +11,8 @@ import statistics
 import requests
 import json
 import subprocess
+from mylogger import *
 
-INFO = 'INFO'
-WARNING = 'WARNING'
-ERROR = 'ERROR'
-FATAL = 'FATAL'
-DEBUG = 'DEBUG'
 
 # Usage: ./rundeadmap.py <run_number>
 # Usage: ./rundeadmap.py <run_number> newqa
@@ -31,24 +27,12 @@ targetdir = "none"
 
 bktokenfile = "token.dat"
 
-#_________________________________________________________________________________
+#______________________________________________________________________________
+#logger = Logger(logfile)
 def LOG(severity, *message):
-    if severity == DEBUG and not verbose:
-        return
-    global logfile
-    filename = str(inspect.stack()[1][1])
-    filename = filename.split('/')[-1]
-    funcname = str(inspect.stack()[1][3])
+    logger = Logger(logfile)
+    logger.log(severity, *message)
 
-    tt = datetime.now()
-    tstamp = "%s-%s-%s-%s:%s:%s"%(str(tt.year)[-2:],str(tt.month).zfill(2),str(tt.day).zfill(2),str(tt.hour).zfill(2),str(tt.minute).zfill(2),str(tt.second).zfill(2))
-    print("[%s][%s][%s]"%(tstamp,severity,filename+':'+funcname),*message)
-
-    writestring = ''
-    for s in message:
-        writestring = writestring + ' ' + str(s)
-    with open(logfile,'a') as f:
-        f.write("[%s][%s][%s] "%(tstamp,severity,filename+':'+funcname)+writestring+'\n')
 
 #________________________________________________________________________________
 def execute(command, log = True, severitylog = INFO):
