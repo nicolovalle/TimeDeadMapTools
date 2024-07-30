@@ -436,11 +436,15 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   // second row
   
-  c1->cd(5); // orbit offset
+  c1->cd(5); // orbit gap
   hOrb->Draw("histo");
   //hOrb->Write();
 
-  c1->cd(6); // IB and OB efficiency
+  c1->cd(6); // orbit gap, log scale
+  hOrb->Draw("histo");
+  gPad->SetLogy();
+
+  c1->cd(7); // IB and OB efficiency
   hEffOB->GetXaxis()->SetTitle("step");
   hEffOB->Draw("histo");
   hEffIB->SetLineColor(2);
@@ -449,7 +453,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hEffOB->Write();
   //hEffIB->Write();
 
-  c1->cd(7); // IB and OB efficiency vs time
+  c1->cd(8); // IB and OB efficiency vs time
   TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
   TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
   grIB->SetLineColor(kRed);
@@ -466,7 +470,6 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //grOB->Write();
   //grIB->Write();
 
-  c1->cd(8);
 
   // third row
 
