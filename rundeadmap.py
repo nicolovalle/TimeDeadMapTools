@@ -11,6 +11,7 @@ import statistics
 import requests
 import json
 import subprocess
+from contextlib import redirect_stdout, redirect_stderr
 from mylogger import *
 
 
@@ -26,6 +27,7 @@ run = -1
 targetdir = "none"
 
 bktokenfile = "token.dat"
+QAmacroTimeout = 120
 
 #______________________________________________________________________________
 #logger = Logger(logfile)
@@ -50,13 +52,14 @@ def Exit(severitylog = INFO):
 
 #________________________________________________________________________________
 def querylogbook(run):
-    LOG(INFO,'Querying bookkeeping for run',run)
     LOG(INFO,'Reading token for bookkeeping API from ',bktokenfile)
     with open(bktokenfile,'r') as f:
         tok = f.readline().strip()
-    req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0&token=%s'%(str(run),str(tok)),verify=False)
-    if str(req.status_code) != '200':
-        LOG(FATAL,'Bookkeeping response:',req.status_code)
+    LOG(INFO,'Querying bookkeeping for run',run)
+    with open(os.devnull,'w') as fnull, redirect_stdout(fnull), redirect_stderr(fnull):
+        req = requests.get('https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=%s&page[offset]=0&token=%s'%(str(run),str(tok)),verify=False)
+    if req.status_code != 200:
+        LOG(FATAL,'Bookkeeping response:',req)
         Exit(FATAL)
     data = json.loads(req.text)['data']
     if os.path.exists(targetdir):
@@ -196,13 +199,15 @@ if __name__ == "__main__":
                 orbits.append(int(re.search('First orbit [0-9]+',ll).group(0).replace('First orbit','')))
         
         if len(orbits) == 0:
-            LOG(FATAL,"No good workflow output, exiting")
+            LOG(FATAL,"Bad workflow output, first TF orbit could not be read from the logs. Exiting")
             Exit(FATAL)
-        
-        for ll in loglines:
-            if 'ERROR' in ll or 'Error' in ll:
-                LOG(ERROR,'There are ERRORS in wf stdout')
-                break
+
+        logerrorlines = [ll for ll in loglines if 'ERROR' in ll or 'Error' in ll]
+        if logerrorlines:
+            LOG(ERROR,'There are',len(logerrorlines),'lines with errors in wf stdout. Reporting max 2 below')
+            LOG(ERROR,'First error line --',logerrorlines[0])
+            if len(logerrorlines) > 1:
+                LOG(ERROR,'Last error line --',logerrorlines[-1])
         
         orbits.sort()
         
@@ -224,7 +229,7 @@ if __name__ == "__main__":
             sevcheck = WARNING
         LOG(sevcheck,"Max orbit gap:",max(orbgap),"Min orbit gap:",min(orbgap),"Std orbit gap:",sigmaorb)
         LOG(INFO,targetdir+'/orbits.png created.')
-        LOG(INFO,'Run',run,'completed. Running QA on object. Setting timeout = 120 sec')
+        LOG(INFO,'Run',run,'completed. Running QA on object. Setting timeout =',QAmacroTimeout,'sec')
 
             
     try:
@@ -241,7 +246,7 @@ if __name__ == "__main__":
         execute('mkdir '+targetdir+'/ITSQA/')
         rootcommand = ['root', '-b', 'DeadMapQA.C("'+targetdir+'/its_time_deadmap.root",'+str(run)+',"'+targetdir+'/ITSQA/")']
         process = subprocess.Popen(rootcommand, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdout, stderr = process.communicate(timeout=120)
+        stdout, stderr = process.communicate(timeout=QAmacroTimeout)
 
         with open(targetdir+'/ITSQA/root.log','w') as fqa:
             fqa.write('========\n stderr \n========\n')
@@ -269,5 +274,5 @@ if __name__ == "__main__":
         LOG(ERROR,'root for QA produced exceptions:',e)
         execute('rm -fr '+targetdir+'/ITSQA/')
 
-    LOG(INFO,'---> rundeadmap.py reached the end <---')
+    LOG(INFO,'--->',sys.argv[0],'reached the end <---')
     Exit()
