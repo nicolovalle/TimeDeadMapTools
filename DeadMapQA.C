@@ -395,7 +395,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
   WorstIB->SetName(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
 
-  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(10*(int)maxgapsec, 1200),0, int(maxgapsec+1));
+  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(10*(int)(maxgapsec+1), 1200),0, int(maxgapsec+1));
   for (int ist = 1; ist < NSteps; ist++){
     hGapdist->Fill(TimeStampFromStart[ist]-TimeStampFromStart[ist-1]);
   }
