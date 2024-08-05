@@ -223,6 +223,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   Long_t previousorbit = 0;
   
   Long_t maxgap = 0;
+  double maxgapsec = 0;
   int ngap_overnominal = 0;
 
   Long_t unAnchorable = 0;
@@ -332,7 +333,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
   } // end of for M:MAP
 
-  
+  maxgapsec = (double)(maxgap*LHCOrbitNS*1.e-9);
 
   QALOG<<"Max orbit gap: "<<maxgap<<"\n";
   QALOG<<"Number of gaps over nominal ("<<NominalGap<<"): "<<ngap_overnominal<<"\n";
@@ -394,6 +395,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
   WorstIB->SetName(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
 
+  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(10*(int)maxgapsec, 1200),0, int(maxgapsec+1));
+  for (int ist = 1; ist < NSteps; ist++){
+    hGapdist->Fill(TimeStampFromStart[ist]-TimeStampFromStart[ist-1]);
+  }
+
   QALOG<<"Comparing orbit range and run duration\n";
 
   GetTimeStamps(runnumber, firstorbit, currentorbit);
@@ -441,7 +447,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hOrb->Write();
 
   c1->cd(6); // orbit gap, log scale
-  hOrb->Draw("histo");
+  //hOrb->Draw("histo");
+  hGapdist->Draw("histo");
   gPad->SetLogy();
 
   c1->cd(7); // IB and OB efficiency
