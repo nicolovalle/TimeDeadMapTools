@@ -54,6 +54,7 @@ const std::vector<std::vector<int>> Enabled{ // not in use yet
 // global variables handled by the functions
 std::map<unsigned long, std::vector<uint16_t>> MAP;
 std::vector<unsigned long> MAPKeys;
+std::vector<int> MAPNwords;
 std::vector<uint16_t> SMAP;
 std::map<TString, TString> QAcheck;
 long runstart = -1, mapstart = -1, runstop = -1, mapstop = -1;
@@ -191,6 +192,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hTimeSpan = new TH1F("Time range","Time range;;sec",2,0,2);
+  
 
   const Int_t hInbin = MAP.size()-1;
   Double_t hIbins[hInbin+1];
@@ -205,6 +207,14 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   std::vector<TH1F*> hhLaneDeadTime;
   for (int il = 0; il<7; il++){
     hhLaneDeadTime.push_back(new TH1F(Form("Lane dead time L%d",il),Form("Run %d - layer %d;lane (stave number on the axis);dead time (> %d sec)",runnumber,il,(int)SecForTrgRamp), NStaves[il]*NLanesPerStave[il], 0, NStaves[il]*NLanesPerStave[il]));
+  }
+
+  auto minIt = std::min_element(MAPNwords.begin(), MAPNwords.end());
+  auto maxIt = std::max_element(MAPNwords.begin(), MAPNwords.end());
+
+  TH1F *hNwords = new TH1F("Number of words","Number of words distribution;N;frequency", (int)(1+TMath::Sqrt(MAPNwords.size())/2.), *minIt, *maxIt+1);
+  for (int nw : MAPNwords){
+    hNwords->Fill(nw);
   }
   
   
@@ -480,19 +490,25 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   // third row
 
-  c1->cd(9); // worst OB
-  WorstOB->Draw("lcolz");
+  c1->cd(9);
+  hNwords->Draw("histo");
+  gPad->SetLogy();
+
+  c1->cd(10); // worst OB
+  WorstOB->Draw("lcol");
   //WorstOB->Write();
   
-  c1->cd(10); // worst IB
-  WorstIB->Draw("lcolz");
+  c1->cd(11); // worst IB
+  WorstIB->Draw("lcol");
   //WorstIB->Write();
 
-  c1->cd(11); // last snapshot
+  c1->cd(12); // last snapshot
   LastMAP->SetTitle("Last snapshot");
   LastMAP->SetName("Last snapshot");
-  LastMAP->Draw("lcolz");
+  LastMAP->Draw("lcol");
   //LastMAP->Write();
+
+ 
 
   c1->cd(4); // text summary
   TLatex latex;
@@ -827,6 +843,7 @@ void fillmap(TString fname){
   MAP.clear();
   MAPKeys.clear();
   SMAP.clear();
+  MAPNwords.clear();
 
   TFile *f = new TFile(fname);
   o2::itsmft::TimeDeadMap* obj = nullptr;
@@ -873,6 +890,7 @@ void fillmap(TString fname){
   for (auto OO : MAPKeys){
     std::vector<uint16_t> MapAtOrbit;
     obj->getMapAtOrbit(OO, MapAtOrbit);
+    MAPNwords.push_back(MapAtOrbit.size());
     MAP[OO] = expandvector(MapAtOrbit,mapver,"lane");
   }
 
