@@ -442,14 +442,6 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   HSMAP->SetMinimum(1);
   //HSMAP->Write();
 
-  /*
-  c1->cd(3);
-  hTimeSpan->GetXaxis()->SetBinLabel(1,"RCT");
-  hTimeSpan->GetXaxis()->SetBinLabel(2,"MAP");
-  hTimeSpan->Draw("histo text");
-  //hTimeSpan->Write();
-  */
-
   c1->cd(4);
 
   // second row
@@ -519,12 +511,15 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   latex0.SetTextAlign(13);
   latex0.DrawLatex(0.1,yPos0,"INFO");
   yPos0 -= 0.05*2;
-
+  latex0.DrawLatex(0.1,yPos0,Form("Map size: %d",NSteps));
+  yPos0 -= 0.05*2;
+  latex0.DrawLatex(0.1,yPos0,Form("Dead chips (IB+OB): %d + %d",nfullydeadIB,SMAP.size()-nfullydeadIB));
+  yPos0 -= 0.05*2;
   latex0.DrawLatex(0.1,yPos0,Form("RCT duration (sec): %7.1f",RCTrunduration));
   yPos0 -= 0.05;
   latex0.DrawLatex(0.1,yPos0,Form("MAP duration (sec): %7.1f",MAPduration));
-  yPos0 -= 0.05*2;
-  latex0.DrawLatex(0.1,yPos0,Form("Dead chips (IB+OB): %d + %d",nfullydeadIB,SMAP.size()-nfullydeadIB));
+  
+  
  
 
   c1->cd(4); // text summary
