@@ -11,7 +11,7 @@ DEBUG = 'DEBUG'
 class Logger:
     def __init__(self, logfile):
         self.logfile = logfile
-        self.highligh_keyword = False
+        self.highlight_keyword = False
 
     def set_highlight_keyword(self, hl: bool):
         self.highlight_keyword = hl
