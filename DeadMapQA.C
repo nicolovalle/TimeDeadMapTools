@@ -36,7 +36,7 @@ TString logfilename = "DeadMapQA.log";
 double SecForTrgRamp = 15;
 bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
-Long_t NominalGap = 32000;
+Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
@@ -212,7 +212,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   auto minIt = std::min_element(MAPNwords.begin(), MAPNwords.end());
   auto maxIt = std::max_element(MAPNwords.begin(), MAPNwords.end());
 
-  TH1F *hNwords = new TH1F("Number of words","Number of words distribution;N;frequency", (int)(1+TMath::Sqrt(MAPNwords.size())/2.), *minIt, *maxIt+1);
+  QALOG<<"Min number of words: "<<*minIt<<"\n";
+  QALOG<<"Max number of words: "<<*maxIt<<"\n";
+
+  TH1F *hNwords = new TH1F("Number of words","Number of words distribution;N;frequency", (int)(1+TMath::Sqrt(MAPNwords.size())/2.)+10, *minIt, *maxIt+10);
   for (int nw : MAPNwords){
     hNwords->Fill(nw);
   }
@@ -348,7 +351,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QALOG<<"Max orbit gap: "<<maxgap<<"\n";
   QALOG<<"Number of gaps over nominal ("<<NominalGap<<"): "<<ngap_overnominal<<"\n";
 
-  QAcheck["Orbit gaps"] = (maxgap > 2.*UnanchorableThreshold || ngap_overnominal > 0.25*NSteps ) ? "BAD" : (maxgap > NominalGap && ngap_overnominal > 2 ) ? "MEDIUM" : "GOOD";
+  QAcheck["Orbit gaps"] = (maxgap > 1.*UnanchorableThreshold || ngap_overnominal > 0.25*NSteps ) ? "BAD" : (maxgap > 2.*NominalGap && ngap_overnominal > 2 ) ? "MEDIUM" : "GOOD"; 
 
   double unAnchorableFrac = 1.*unAnchorable/ (currentorbit-firstorbit);
 
@@ -405,7 +408,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
   WorstIB->SetName(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
 
-  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(10*(int)(maxgapsec+1), 1200),0, int(maxgapsec+1));
+  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(100*(int)(maxgapsec+1), 1200),0, int(maxgapsec+1));
   for (int ist = 1; ist < NSteps; ist++){
     hGapdist->Fill(TimeStampFromStart[ist]-TimeStampFromStart[ist-1]);
   }
@@ -453,7 +456,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c1->cd(6); // orbit gap, log scale
   //hOrb->Draw("histo");
   hGapdist->Draw("histo");
-  gPad->SetLogy();
+  //gPad->SetLogy();
 
   c1->cd(7); // IB and OB efficiency
   hEffOB->GetXaxis()->SetTitle("step");
