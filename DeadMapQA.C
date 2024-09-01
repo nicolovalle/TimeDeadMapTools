@@ -98,6 +98,8 @@ void fillmap(TString fname);
 void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
+TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, TString outputName, TString outputTitle);
+
 void PrintAndExit(TString spec=""){
 
   QALOG<<"\nQA SUMMARY\n";
@@ -470,17 +472,27 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c1->cd(8); // IB and OB efficiency vs time
   TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
   TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
+  TGraph *grIBrolling = RollingAverage(grIB,300,"IB rolling average","IB rolling average");
+  TGraph *grOBrolling = RollingAverage(grOB,300,"300 steps rolling average","300 steps rolling average;time (sec);Dead fraction");
   grIB->SetLineColor(kRed);
   grOB->SetLineColor(kBlue);
+  grIBrolling->SetLineColor(kRed);
+  grIBrolling->SetLineWidth(2);
+  grOBrolling->SetLineColor(kBlue);
+  grOBrolling->SetLineWidth(2);
   grOB->SetMinimum(0);
   grOB->SetMaximum(1);
   grOB->SetTitle("Dead fraction vs time");
   grOB->GetXaxis()->SetTitle("time (sec)");
-  grOB->Draw();
-  grIB->Draw("same");
+  grOB->SetMinimum(0);
+  grOB->SetMaximum(0);
+  //grOB->Draw();
+  //grIB->Draw("same");
+  grOBrolling->Draw();
+  grIBrolling->Draw("same");
   gPad->SetLogy();
-  grOB->SetName("Dead fraction vs time OB");
-  grIB->SetName("Dead fraction vs time IB");
+  //grOB->SetName("Dead fraction vs time OB");
+  //grIB->SetName("Dead fraction vs time IB");
   //grOB->Write();
   //grIB->Write();
 
@@ -944,3 +956,55 @@ void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2){
 }
     
 
+#include <TGraph.h>
+#include <TMath.h>
+#include <vector>
+#include <iostream>
+
+// Function to compute rolling average and create a new TGraph
+TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, TString outputName, TString outputTitle) {
+    if (!originalGraph) {
+        std::cerr << "Error: Original graph is null." << std::endl;
+        return nullptr;
+    }
+
+    int nPoints = originalGraph->GetN();
+    if (nPoints == 0) {
+        std::cerr << "Error: Original graph has no points." << std::endl;
+        return nullptr;
+    }
+
+    std::vector<double> newX;
+    std::vector<double> newY;
+
+    for (int i = 0; i < nPoints; ++i) {
+        
+        int start = TMath::Max(0, i - windowSize / 2);
+        int end = TMath::Min(nPoints - 1, i + windowSize / 2);
+
+        double sumY = 0.0;
+        double count = 0;
+
+	double x = originalGraph->GetPointX(i);
+	
+        for (int j = start; j <= end-1; ++j) {
+	    
+	    double y = originalGraph->GetPointY(j);
+	    double dx = originalGraph->GetPointX(j+1) - originalGraph->GetPointX(j);
+            sumY += y*dx;
+            count += dx;
+        }
+
+        double avgY = sumY / count;
+
+        newX.push_back(x);
+	newY.push_back(avgY);
+    }
+
+    // Create the new TGraph with the averaged Y-values
+    TGraph* averagedGraph = new TGraph(nPoints, newX.data(), newY.data());
+    averagedGraph->SetName(outputName);
+    averagedGraph->SetTitle(outputTitle);
+
+    return averagedGraph;
+}
