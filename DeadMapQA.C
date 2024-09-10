@@ -19,6 +19,8 @@
 #include <TVector2.h>
 #include <TH2Poly.h>
 #include <TStyle.h>
+#include <TGraph.h>
+#include <TMath.h>
 
 #include "Logger.h"
 
@@ -38,6 +40,7 @@ bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
+bool writeRootFile = false; // can be changes as argument of the macro
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}, // L1
@@ -98,7 +101,8 @@ void fillmap(TString fname);
 void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
-TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, TString outputName, TString outputTitle);
+TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle);
+TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, int everyNpoints, TString outputName, TString outputTitle);
 
 void PrintAndExit(TString spec=""){
 
@@ -133,7 +137,7 @@ void PrintAndExit(TString spec=""){
 }
   
 
-void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./"){
+void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
@@ -158,6 +162,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   TCanvas *c4 = new TCanvas("QAsummary4","QAsummary4",1200,4200);
   c4->Divide(1,7);
+
+  TCanvas *c5 = new TCanvas("QAsummary5","QAsummary5",2000,400);
+  c5->Divide(7,1);
 
   
   gStyle->SetOptStat(0);
@@ -277,6 +284,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   double TimeStampFromStart[NSteps];
   double BarrelEfficiency[2][NSteps];
+  double LayerEfficiency[7][NSteps];
 
   double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * LHCOrbitNS * 1.e-9;
   
@@ -306,7 +314,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     
 
     int OBdead = 0, IBdead = 0;
-    for (int il = 0; il<2; il++) BarrelEfficiency[il][countstep] = 0.;
+    for (int ib = 0; ib<2; ib++) BarrelEfficiency[ib][countstep] = 0.;
+    for (int il = 0; il<7; il++) LayerEfficiency[il][countstep] = 0.;
     
     for (uint lan : M.second) {
 
@@ -316,7 +325,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       
       if (lan < N_LANES_IB) IBdead++;
       else OBdead++;
-      int ibarrel = (int)(LaneToLayer[lan] > 2);
+      int ilayer = LaneToLayer[lan];
+      int ibarrel = (int)(ilayer > 2);
+      LayerEfficiency[ilayer][countstep] += 1./ (NLanesPerStave[ilayer]*NStaves[ilayer]);
       BarrelEfficiency[ibarrel][countstep] += 1./((ibarrel <1) ? N_LANES_IB : (N_LANES - N_LANES_IB));
     }
 
@@ -410,7 +421,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
   WorstIB->SetName(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
 
-  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(100*(int)(maxgapsec+1), 1200),0, int(maxgapsec+1));
+  
+  TH1F *hGapdist = new TH1F("Gaps distribution","Gap distribution;gap (sec);frequency",TMath::Min(100*(int)(maxgapsec+1), 1200), 0, int(maxgapsec+1));
   for (int ist = 1; ist < NSteps; ist++){
     hGapdist->Fill(TimeStampFromStart[ist]-TimeStampFromStart[ist-1]);
   }
@@ -435,7 +447,31 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   hTimeSpan->SetBinContent(1,RCTrunduration);
   hTimeSpan->SetBinContent(2,MAPduration);
 
-  //TFile outroot(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
+  TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
+  TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
+  TGraph *grIBrolling = RollingAverage(grIB,300,1,"IB rolling average","IB rolling average");
+  TGraph *grOBrolling = RollingAverage(grOB,300,1,"300 steps rolling average","300 steps rolling average;time (sec);Dead fraction");
+  int nRolling = NSteps/25;
+  TGraph *gr0 = RollingAverage(TimeStampFromStart,LayerEfficiency[0],NSteps,nRolling,nRolling,"L0 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr1 = RollingAverage(TimeStampFromStart,LayerEfficiency[1],NSteps,nRolling,nRolling,"L1 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr2 = RollingAverage(TimeStampFromStart,LayerEfficiency[2],NSteps,nRolling,nRolling,"L2 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr3 = RollingAverage(TimeStampFromStart,LayerEfficiency[3],NSteps,nRolling,nRolling,"L3 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr4 = RollingAverage(TimeStampFromStart,LayerEfficiency[4],NSteps,nRolling,nRolling,"L4 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr5 = RollingAverage(TimeStampFromStart,LayerEfficiency[5],NSteps,nRolling,nRolling,"L5 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *gr6 = RollingAverage(TimeStampFromStart,LayerEfficiency[6],NSteps,nRolling,nRolling,"L6 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+
+  TFile *outroot = nullptr;
+  if (WriteRootFile){
+    outroot = new TFile(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
+    gr0->Write();
+    gr1->Write();
+    gr2->Write();
+    gr3->Write();
+    gr4->Write();
+    gr5->Write();
+    gr6->Write();
+  }
+  
  
   c1->cd(1); // average evolving map
   HMAP->Draw("lcolz");
@@ -470,10 +506,6 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hEffIB->Write();
 
   c1->cd(8); // IB and OB efficiency vs time
-  TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
-  TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
-  TGraph *grIBrolling = RollingAverage(grIB,300,"IB rolling average","IB rolling average");
-  TGraph *grOBrolling = RollingAverage(grOB,300,"300 steps rolling average","300 steps rolling average;time (sec);Dead fraction");
   grIB->SetLineColor(kRed);
   grOB->SetLineColor(kBlue);
   grIBrolling->SetLineColor(kRed);
@@ -528,7 +560,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   yPos0 -= 0.05*2;
   latex0.DrawLatex(0.1,yPos0,Form("Map size: %d",NSteps));
   yPos0 -= 0.05*2;
-  latex0.DrawLatex(0.1,yPos0,Form("Dead chips (IB+OB): %d + %d",nfullydeadIB,SMAP.size()-nfullydeadIB));
+  latex0.DrawLatex(0.1,yPos0,Form("Dead chips (IB+OB): %d + %lu",nfullydeadIB,SMAP.size()-nfullydeadIB));
   yPos0 -= 0.05*2;
   latex0.DrawLatex(0.1,yPos0,Form("RCT duration (sec): %7.1f",RCTrunduration));
   yPos0 -= 0.05;
@@ -633,6 +665,41 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     }
     
   }
+
+  c5->cd(1);
+  gr0->SetMarkerStyle(20);
+  gr0->Draw();
+  gPad->SetLogy();
+
+  c5->cd(2);
+  gr1->SetMarkerStyle(20);
+  gr1->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(3);
+  gr2->SetMarkerStyle(20);
+  gr2->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(4);
+  gr3->SetMarkerStyle(20);
+  gr3->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(5);
+  gr4->SetMarkerStyle(20);
+  gr4->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(6);
+  gr5->SetMarkerStyle(20);
+  gr5->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(7);
+  gr6->SetMarkerStyle(20);
+  gr6->Draw();
+  gPad->SetLogy();
   
   
   
@@ -644,9 +711,12 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
   c3->SaveAs(Form("%s/DeadMapQA3.png",outdir.Data()));
   c4->SaveAs(Form("%s/DeadMapQA4.png",outdir.Data()));
+  c5->SaveAs(Form("%s/DeadMapQA5.png",outdir.Data()));
   
 
-  //outroot.Close();
+  if (WriteRootFile){
+    outroot->Close();
+  }
   
   QALOG<<"Orbits: "<<firstorbit<<" to "<<currentorbit<<" corrsponding to "<<(currentorbit - firstorbit)*89.e-6 / 60.<<" minutes\n";
 
@@ -782,6 +852,7 @@ uint16_t StaveToLayer(uint16_t stv){
     count+=NStaves[i];
     if (stv < count) return (uint16_t)i;
   }
+  return -1;
 }
 
 uint16_t FirstLaneOfStave(uint16_t stv){
@@ -956,13 +1027,57 @@ void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2){
 }
     
 
-#include <TGraph.h>
-#include <TMath.h>
-#include <vector>
-#include <iostream>
+
+ 
+// Function to compute rolling average and create a new TGraph
+TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int windowSize, int everyNpoints, TString outputName, TString outputTitle) {
+  
+    if (nPoints == 0) {
+        std::cerr << "Error: Number of points is zero." << std::endl;
+        return nullptr;
+    }
+
+  
+
+    std::vector<double> newX{};
+    std::vector<double> newY{};
+
+    for (int i = 0; i < nPoints; ++i) {
+        
+        int start = TMath::Max(0, i - windowSize / 2);
+        int end = TMath::Min(nPoints - 1, i + windowSize / 2);
+
+        double sumY = 0.0;
+        double count = 0;
+
+	double x = xValues[i];
+	
+        for (int j = start; j <= end-1; ++j) {
+	    
+	    double y = yValues[j];
+	    double dx = xValues[j+1] - xValues[j];
+            sumY += y*dx;
+            count += dx;
+        }
+
+        double avgY = sumY / count;
+
+	if (i % everyNpoints == 0){ 
+	  newX.push_back(x);
+	  newY.push_back(avgY);
+	}
+    }
+
+    // Create the new TGraph with the averaged Y-values
+    TGraph* averagedGraph = new TGraph(newX.size(), newX.data(), newY.data());
+    averagedGraph->SetName(outputName);
+    averagedGraph->SetTitle(outputTitle);
+
+    return averagedGraph;
+}
 
 // Function to compute rolling average and create a new TGraph
-TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, TString outputName, TString outputTitle) {
+TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, int everyNpoints, TString outputName, TString outputTitle) {
     if (!originalGraph) {
         std::cerr << "Error: Original graph is null." << std::endl;
         return nullptr;
@@ -974,37 +1089,11 @@ TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, TString outp
         return nullptr;
     }
 
-    std::vector<double> newX;
-    std::vector<double> newY;
-
-    for (int i = 0; i < nPoints; ++i) {
-        
-        int start = TMath::Max(0, i - windowSize / 2);
-        int end = TMath::Min(nPoints - 1, i + windowSize / 2);
-
-        double sumY = 0.0;
-        double count = 0;
-
-	double x = originalGraph->GetPointX(i);
-	
-        for (int j = start; j <= end-1; ++j) {
-	    
-	    double y = originalGraph->GetPointY(j);
-	    double dx = originalGraph->GetPointX(j+1) - originalGraph->GetPointX(j);
-            sumY += y*dx;
-            count += dx;
-        }
-
-        double avgY = sumY / count;
-
-        newX.push_back(x);
-	newY.push_back(avgY);
+    double x[nPoints], y[nPoints];
+    for (int i=0; i<nPoints; i++){
+      x[i] = originalGraph->GetPointX(i);
+      y[i] = originalGraph->GetPointY(i);
     }
 
-    // Create the new TGraph with the averaged Y-values
-    TGraph* averagedGraph = new TGraph(nPoints, newX.data(), newY.data());
-    averagedGraph->SetName(outputName);
-    averagedGraph->SetTitle(outputTitle);
-
-    return averagedGraph;
+    return RollingAverage(x,y,nPoints,windowSize,everyNpoints,outputName,outputTitle);
 }

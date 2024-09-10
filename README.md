@@ -51,6 +51,7 @@ If everything goes well, your working directory will be populated with the follo
              ├── DeadMapQA2.png
              ├── DeadMapQA3.png
              ├── DeadMapQA4.png
+             ├── DeadMapQA5.png
              └── root.log
 ```
 
@@ -73,6 +74,7 @@ Description of the output:
     + `DeadMapQA2.png` the complete history of the lanes status vs orbit
     + `DeadMapQA3.png` the average dead time, stave by stave
     + `DeadMapQA4.png` the average dead time, lane by lane
+    + `DeadMapQA5.png` with the averaged time evolution of dead time of each layer
     + `root.log` contains std err and std out of the command `root -b DeadMapQA.C`
 
 
