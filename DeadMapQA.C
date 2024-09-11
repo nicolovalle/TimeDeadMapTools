@@ -451,7 +451,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
   TGraph *grIBrolling = RollingAverage(grIB,300,1,"IB rolling average","IB rolling average");
   TGraph *grOBrolling = RollingAverage(grOB,300,1,"300 steps rolling average","300 steps rolling average;time (sec);Dead fraction");
-  int nRolling = NSteps/25;
+  int nRolling = TMath::Max(NSteps/25,1);
   TGraph *gr0 = RollingAverage(TimeStampFromStart,LayerEfficiency[0],NSteps,nRolling,nRolling,"L0 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
   TGraph *gr1 = RollingAverage(TimeStampFromStart,LayerEfficiency[1],NSteps,nRolling,nRolling,"L1 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
   TGraph *gr2 = RollingAverage(TimeStampFromStart,LayerEfficiency[2],NSteps,nRolling,nRolling,"L2 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
