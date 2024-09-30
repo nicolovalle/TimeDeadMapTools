@@ -40,7 +40,7 @@ bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
-bool writeRootFile = true; // can be changes as argument of the macro
+bool writeRootFile = false; // can be changed as argument of the macro
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}, // L1
