@@ -40,7 +40,7 @@ bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
-bool writeRootFile = false; // can be changes as argument of the macro
+bool writeRootFile = true; // can be changes as argument of the macro
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}, // L1
@@ -59,6 +59,7 @@ std::map<unsigned long, std::vector<uint16_t>> MAP;
 std::vector<unsigned long> MAPKeys;
 std::vector<int> MAPNwords;
 std::vector<uint16_t> SMAP;
+std::map<unsigned long, std::vector<uint16_t>> StaveMAP; //array of staID with all the lanes dead
 std::map<TString, TString> QAcheck;
 long runstart = -1, mapstart = -1, runstop = -1, mapstop = -1;
 Logger QALOG;
@@ -74,6 +75,7 @@ const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
 const int N_STAVES_IB = 12+16+20;
 const int N_STAVES = 192;
+const int N_CHIPS = 24120;
 int LaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
 int LaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
 int LaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
@@ -91,10 +93,12 @@ uint16_t isLastOfLane(uint16_t chipid);
 uint16_t StaveToLayer(uint16_t stv);
 uint16_t FirstLaneOfStave(uint16_t stv);
 uint16_t LastLaneOfStave(uint16_t stv);
+uint16_t ChipToLane(uint16_t chipid);
+
+
 
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, int version);
 
-uint16_t ChipToLane(uint16_t chipid);
 
 void fillmap(TString fname);
 
@@ -137,7 +141,7 @@ void PrintAndExit(TString spec=""){
 }
   
 
-void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
+void DeadMapQA_wip(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
@@ -163,8 +167,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TCanvas *c4 = new TCanvas("QAsummary4","QAsummary4",1200,4200);
   c4->Divide(1,7);
 
-  TCanvas *c5 = new TCanvas("QAsummary5","QAsummary5",2000,400);
-  c5->Divide(7,1);
+  TCanvas *c5 = new TCanvas("QAsummary5","QAsummary5",2000,800);
+  c5->Divide(7,2);
 
   
   gStyle->SetOptStat(0);
@@ -275,20 +279,25 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QALOG<<"Static map: IB dead chips: "<<nfullydeadIB<<"\n";
   QALOG<<"Static map: OB lanes with at least one fully dead chip: "<<nwithfullydeadOB<<"\n";
   QAcheck["Fully dead IB"] = (nfullydeadIB < 9) ? "GOOD" : (1.*nfullydeadIB < 0.1*N_LANES_IB) ? "MEDIUM" : "BAD"; // 9 chips is ~2% of IB
-  QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";  
+  QAcheck["Fully dead OB"] = (1.*nwithfullydeadOB/N_LANES) < 0.02 ? "GOOD" : "BAD";
+
+  
 
 
   int worstOBcount = -1, worstIBcount = -1;
   int worstOBstep = -1, worstIBstep = -1;
   Long_t worstOBorbit = 0, worstIBorbit = 0;
 
+  
+  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * LHCOrbitNS * 1.e-9;
+
+  
+  QALOG<<"Orbit range "<<MAP.begin()->first<<" to "<<MAP.rbegin()->first<<" , in seconds: "<<maprange<<"\n";
+
   double TimeStampFromStart[NSteps];
   double BarrelEfficiency[2][NSteps];
   double LayerEfficiency[7][NSteps];
 
-  double maprange = (double)(MAP.rbegin()->first - MAP.begin()->first) * LHCOrbitNS * 1.e-9;
-  
-  QALOG<<"Orbit range "<<MAP.begin()->first<<" to "<<MAP.rbegin()->first<<" , in seconds: "<<maprange<<"\n";
   
   for (auto M : MAP){
 
@@ -358,6 +367,34 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     countstep++;
   
   } // end of for M:MAP
+
+
+  // Loop over Stave dead MAP
+
+  double staveRecoveryLayer[7][NSteps];
+  double staveRecoveryBarrel[2][NSteps];
+  auto prev = StaveMAP.end();
+  int mapindex = 0;
+  
+  for (auto it = StaveMAP.begin(); it != StaveMAP.end(); it++){
+
+    for (int ib = 0; ib<2; ib++) staveRecoveryBarrel[ib][mapindex] = 0.;
+    for (int il = 0; il<7; il++) staveRecoveryLayer[il][mapindex] = 0.;
+
+    if (prev != StaveMAP.end()){
+      std::vector<uint16_t> prevVec = prev->second;
+      for (uint16_t ist : it->second){
+	if (std::find(prevVec.begin(), prevVec.end(), ist) == prevVec.end()){ // stave is dead now but it was not before
+	  uint16_t ilay = StaveToLayer(ist);
+	  staveRecoveryLayer[ilay][mapindex]+=1;
+	  staveRecoveryBarrel[(int)(ilay > 2)][mapindex]+=1;
+	}
+      }
+    } // end if prev != StaveMAP.end()
+    
+    mapindex++;
+    prev = it;
+  } // end of loop map iterator
 
   maxgapsec = (double)(maxgap*LHCOrbitNS*1.e-9);
 
@@ -447,29 +484,57 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   hTimeSpan->SetBinContent(1,RCTrunduration);
   hTimeSpan->SetBinContent(2,MAPduration);
 
-  TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
-  TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
-  TGraph *grIBrolling = RollingAverage(grIB,300,1,"IB rolling average","IB rolling average");
-  TGraph *grOBrolling = RollingAverage(grOB,300,1,"300 steps rolling average","300 steps rolling average;time (sec);Dead fraction");
+  for (int istep = 0; istep < NSteps; istep++){
+    TimeStampFromStart[istep] /= 60.;
+  }
+  //TGraph *grIB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[0]);
+  //TGraph *grOB = new TGraph(NSteps,TimeStampFromStart,BarrelEfficiency[1]);
+  TGraph *grIBrolling = RollingAverage(TimeStampFromStart,BarrelEfficiency[0],NSteps,300,1,"IB rolling average","IB rolling average");
+  TGraph *grOBrolling = RollingAverage(TimeStampFromStart,BarrelEfficiency[1],NSteps,300,1,"300 steps rolling average","300 steps rolling average;time (min);Dead fraction");
+  
   int nRolling = TMath::Max(NSteps/25,1);
-  TGraph *gr0 = RollingAverage(TimeStampFromStart,LayerEfficiency[0],NSteps,nRolling,nRolling,"L0 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr1 = RollingAverage(TimeStampFromStart,LayerEfficiency[1],NSteps,nRolling,nRolling,"L1 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr2 = RollingAverage(TimeStampFromStart,LayerEfficiency[2],NSteps,nRolling,nRolling,"L2 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr3 = RollingAverage(TimeStampFromStart,LayerEfficiency[3],NSteps,nRolling,nRolling,"L3 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr4 = RollingAverage(TimeStampFromStart,LayerEfficiency[4],NSteps,nRolling,nRolling,"L4 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr5 = RollingAverage(TimeStampFromStart,LayerEfficiency[5],NSteps,nRolling,nRolling,"L5 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
-  TGraph *gr6 = RollingAverage(TimeStampFromStart,LayerEfficiency[6],NSteps,nRolling,nRolling,"L6 rolling average",Form("%d steps rolling average;tim(sec);Dead fraction",nRolling));
+  TGraph *grEffIB = RollingAverage(TimeStampFromStart,BarrelEfficiency[0],NSteps,nRolling,nRolling,"IB rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEffOB = RollingAverage(TimeStampFromStart,BarrelEfficiency[1],NSteps,nRolling,nRolling,"OB rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff0 = RollingAverage(TimeStampFromStart,LayerEfficiency[0],NSteps,nRolling,nRolling,"L0 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff1 = RollingAverage(TimeStampFromStart,LayerEfficiency[1],NSteps,nRolling,nRolling,"L1 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff2 = RollingAverage(TimeStampFromStart,LayerEfficiency[2],NSteps,nRolling,nRolling,"L2 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff3 = RollingAverage(TimeStampFromStart,LayerEfficiency[3],NSteps,nRolling,nRolling,"L3 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff4 = RollingAverage(TimeStampFromStart,LayerEfficiency[4],NSteps,nRolling,nRolling,"L4 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff5 = RollingAverage(TimeStampFromStart,LayerEfficiency[5],NSteps,nRolling,nRolling,"L5 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  TGraph *grEff6 = RollingAverage(TimeStampFromStart,LayerEfficiency[6],NSteps,nRolling,nRolling,"L6 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
+  int nRolling2 = nRolling;
+  TGraph *grRecoIB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[0],NSteps,nRolling2,nRolling2,"IB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grRecoOB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[1],NSteps,nRolling2,nRolling2,"OB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco0 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[0],NSteps,nRolling2,nRolling2,"L0 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco1 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[1],NSteps,nRolling2,nRolling2,"L1 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco2 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[2],NSteps,nRolling2,nRolling2,"L2 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco3 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[3],NSteps,nRolling2,nRolling2,"L3 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco4 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[4],NSteps,nRolling2,nRolling2,"L4 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco5 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[5],NSteps,nRolling2,nRolling2,"L5 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grReco6 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[6],NSteps,nRolling2,nRolling2,"L6 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
 
+  
   TFile *outroot = nullptr;
   if (WriteRootFile){
     outroot = new TFile(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
-    gr0->Write();
-    gr1->Write();
-    gr2->Write();
-    gr3->Write();
-    gr4->Write();
-    gr5->Write();
-    gr6->Write();
+    grEffIB->Write();
+    grEffOB->Write();
+    grEff0->Write();
+    grEff1->Write();
+    grEff2->Write();
+    grEff3->Write();
+    grEff4->Write();
+    grEff5->Write();
+    grEff6->Write();
+    grRecoIB->Write();
+    grRecoOB->Write();
+    grReco0->Write();
+    grReco1->Write();
+    grReco2->Write();
+    grReco3->Write();
+    grReco4->Write();
+    grReco5->Write();
+    grReco6->Write();
   }
   
  
@@ -506,28 +571,13 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hEffIB->Write();
 
   c1->cd(8); // IB and OB efficiency vs time
-  grIB->SetLineColor(kRed);
-  grOB->SetLineColor(kBlue);
   grIBrolling->SetLineColor(kRed);
   grIBrolling->SetLineWidth(2);
   grOBrolling->SetLineColor(kBlue);
   grOBrolling->SetLineWidth(2);
-  grOB->SetMinimum(0);
-  grOB->SetMaximum(1);
-  grOB->SetTitle("Dead fraction vs time");
-  grOB->GetXaxis()->SetTitle("time (sec)");
-  grOB->SetMinimum(0);
-  grOB->SetMaximum(0);
-  //grOB->Draw();
-  //grIB->Draw("same");
   grOBrolling->Draw();
   grIBrolling->Draw("same");
   gPad->SetLogy();
-  //grOB->SetName("Dead fraction vs time OB");
-  //grIB->SetName("Dead fraction vs time IB");
-  //grOB->Write();
-  //grIB->Write();
-
 
   // third row
 
@@ -667,38 +717,73 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   }
 
   c5->cd(1);
-  gr0->SetMarkerStyle(20);
-  gr0->Draw();
+  grEff0->SetMarkerStyle(20);
+  grEff0->Draw();
   gPad->SetLogy();
 
   c5->cd(2);
-  gr1->SetMarkerStyle(20);
-  gr1->Draw();
+  grEff1->SetMarkerStyle(20);
+  grEff1->Draw();
   gPad->SetLogy();
   
   c5->cd(3);
-  gr2->SetMarkerStyle(20);
-  gr2->Draw();
+  grEff2->SetMarkerStyle(20);
+  grEff2->Draw();
   gPad->SetLogy();
   
   c5->cd(4);
-  gr3->SetMarkerStyle(20);
-  gr3->Draw();
+  grEff3->SetMarkerStyle(20);
+  grEff3->Draw();
   gPad->SetLogy();
   
   c5->cd(5);
-  gr4->SetMarkerStyle(20);
-  gr4->Draw();
+  grEff4->SetMarkerStyle(20);
+  grEff4->Draw();
   gPad->SetLogy();
   
   c5->cd(6);
-  gr5->SetMarkerStyle(20);
-  gr5->Draw();
+  grEff5->SetMarkerStyle(20);
+  grEff5->Draw();
   gPad->SetLogy();
   
   c5->cd(7);
-  gr6->SetMarkerStyle(20);
-  gr6->Draw();
+  grEff6->SetMarkerStyle(20);
+  grEff6->Draw();
+  gPad->SetLogy();
+
+  c5->cd(8);
+  grReco0->SetMarkerStyle(20);
+  grReco0->Draw();
+  gPad->SetLogy();
+
+  c5->cd(9);
+  grReco1->SetMarkerStyle(20);
+  grReco1->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(10);
+  grReco2->SetMarkerStyle(20);
+  grReco2->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(11);
+  grReco3->SetMarkerStyle(20);
+  grReco3->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(12);
+  grReco4->SetMarkerStyle(20);
+  grReco4->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(13);
+  grReco5->SetMarkerStyle(20);
+  grReco5->Draw();
+  gPad->SetLogy();
+  
+  c5->cd(14);
+  grReco6->SetMarkerStyle(20);
+  grReco6->Draw();
   gPad->SetLogy();
   
   
@@ -846,6 +931,7 @@ uint16_t isLastOfLane(uint16_t chipid){ // 9999 if it is not
   else return isFirstOfLane(chipid - 6);
 }
 
+
 uint16_t StaveToLayer(uint16_t stv){
   int count = 0;
   for (int i=0; i<7; i++){
@@ -901,11 +987,13 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 	}
       }
 
-      else if (opt == "lane"){
+      else if (opt == "lane" || opt == "stave"){
 
 	uint16_t firstlane = isFirstOfLane(firstel);
 	uint16_t lastlane = isLastOfLane(lastel);
 
+	int ndeadlanes[N_STAVES] = {0};
+	
 	if (firstlane == 9999 || lastlane == 9999){
 	  QALOG<<"FATAL decoding of chip intervals, returning emtpy vector\n";
 	  QAcheck["Chip interval"] = "FATAL";
@@ -913,10 +1001,23 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 	}
 	else{
 	  for (uint16_t il = firstlane ; il <= lastlane; il++){
-	    elementlist.push_back(il);
-	  }
-	}
-      } // end opt == lane
+	    if (opt == "lane"){
+	      elementlist.push_back(il);
+	    }
+	    else if (opt == "stave"){
+	      ndeadlanes[LaneToStave[il]]++;      
+	    } // end opt == stave
+	  } // end of loop over dead lanes
+
+	  if (opt == "stave"){
+	    for (uint16_t ist = 0; ist < N_STAVES; ist++){
+	      if (ndeadlanes[ist] == NLanesPerStave[StaveToLayer(ist)]){
+		elementlist.push_back(ist);
+	      }
+	    }
+	  } // end of opt == stave
+	} // end of check of fatal format
+      } // end opt == lane || opt == stave
     } // end loop word
   } // end map version
 
@@ -942,6 +1043,8 @@ void fillmap(TString fname){
   MAPKeys.clear();
   SMAP.clear();
   MAPNwords.clear();
+
+  StaveMAP.clear();
 
   TFile *f = new TFile(fname);
   o2::itsmft::TimeDeadMap* obj = nullptr;
@@ -985,11 +1088,13 @@ void fillmap(TString fname){
   MAPKeys = obj->getEvolvingMapKeys();
 
   QALOG<<"Orbit keys imported. Importing maps...\n";
+  bool StaveStatus[N_STAVES]; // 1 = dead, 0 = alive
   for (auto OO : MAPKeys){
     std::vector<uint16_t> MapAtOrbit;
     obj->getMapAtOrbit(OO, MapAtOrbit);
     MAPNwords.push_back(MapAtOrbit.size());
     MAP[OO] = expandvector(MapAtOrbit,mapver,"lane");
+    StaveMAP[OO] = expandvector(MapAtOrbit,mapver,"stave");
   }
 
   QALOG<<"... done importing maps for every orbit.\n";
