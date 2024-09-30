@@ -141,7 +141,7 @@ void PrintAndExit(TString spec=""){
 }
   
 
-void DeadMapQA_wip(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
+void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
