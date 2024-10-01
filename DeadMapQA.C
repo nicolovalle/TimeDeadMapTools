@@ -55,6 +55,8 @@ const std::vector<std::vector<int>> Enabled{ // not in use yet
 
 
 // global variables handled by the functions
+int RUN_I;
+TString RUN_S;
 std::map<unsigned long, std::vector<uint16_t>> MAP;
 std::vector<unsigned long> MAPKeys;
 std::vector<int> MAPNwords;
@@ -110,8 +112,7 @@ void fillmap(TString fname);
 void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
-TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle);
-TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, int everyNpoints, TString outputName, TString outputTitle);
+TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle, bool doWeighted = false);
 
 void PrintAndExit(TString spec=""){
 
@@ -145,8 +146,11 @@ void PrintAndExit(TString spec=""){
   exit(0);
 }
   
-
+//////////////// _ MAIN _ /////////////////////
 void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
+
+  RUN_I = runnumber;
+  RUN_S = Form("%d",runnumber);
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
@@ -378,6 +382,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   double staveRecoveryLayer[7][NSteps];
   double staveRecoveryBarrel[2][NSteps];
+  int nRecoIB = 0;
+  int nRecoOB = 0;
   auto prev = StaveMAP.end();
   int mapindex = 0;
   
@@ -393,6 +399,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 	  uint16_t ilay = StaveToLayer(ist);
 	  staveRecoveryLayer[ilay][mapindex]+=1;
 	  staveRecoveryBarrel[(int)(ilay > 2)][mapindex]+=1;
+	  if (ilay < 3) nRecoIB++;
+	  else nRecoOB++;
 	}
       }
     } // end if prev != StaveMAP.end()
@@ -401,6 +409,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     prev = it;
   } // end of loop map iterator
 
+  double recoIBperh = 3600.* nRecoIB / maprange;
+  double recoOBperh = 3600.* nRecoOB / maprange;
+ 
   maxgapsec = (double)(maxgap*LHCOrbitNS*1.e-9);
 
   QALOG<<"Max orbit gap: "<<maxgap<<"\n";
@@ -413,6 +424,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QALOG<<"Un-anchorable number of orbits: "<<unAnchorable<<", corresponding to a fraction of the run of "<<unAnchorableFrac<<"\n";
 
   QAcheck["Un-anchorable fraction"] = (unAnchorableFrac < 0.02) ? "GOOD" : (unAnchorableFrac < 0.05) ? "MEDIUM" : "BAD";
+
+  QALOG<<"Stave recoveries (IB/OB): "<<nRecoIB<<"/"<<nRecoOB<<"\n";
+  QALOG<<"Stave revoery rate (IB/OB) (1/h): "<<recoIBperh<<"/"<<recoOBperh<<"\n";
 
   QALOG<<"Worst cases computed skipping first "<<SecForTrgRamp<<" seconds.\n";
   QALOG<<"Worst OB case: orbit "<<worstOBorbit<<" step #"<<worstOBstep<<" dead lanes "<<worstOBcount<<"\n";
@@ -508,15 +522,15 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TGraph *grEff5 = RollingAverage(TimeStampFromStart,LayerEfficiency[5],NSteps,nRolling,nRolling,"L5 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
   TGraph *grEff6 = RollingAverage(TimeStampFromStart,LayerEfficiency[6],NSteps,nRolling,nRolling,"L6 rolling average",Form("%d steps rolling average;time(min);Dead fraction",nRolling));
   int nRolling2 = nRolling;
-  TGraph *grRecoIB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[0],NSteps,nRolling2,nRolling2,"IB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grRecoOB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[1],NSteps,nRolling2,nRolling2,"OB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco0 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[0],NSteps,nRolling2,nRolling2,"L0 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco1 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[1],NSteps,nRolling2,nRolling2,"L1 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco2 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[2],NSteps,nRolling2,nRolling2,"L2 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco3 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[3],NSteps,nRolling2,nRolling2,"L3 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco4 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[4],NSteps,nRolling2,nRolling2,"L4 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco5 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[5],NSteps,nRolling2,nRolling2,"L5 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
-  TGraph *grReco6 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[6],NSteps,nRolling2,nRolling2,"L6 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2));
+  TGraph *grRecoIB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[0],NSteps,nRolling2,nRolling2,"IB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grRecoOB = RollingAverage(TimeStampFromStart,staveRecoveryBarrel[1],NSteps,nRolling2,nRolling2,"OB recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco0 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[0],NSteps,nRolling2,nRolling2,"L0 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco1 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[1],NSteps,nRolling2,nRolling2,"L1 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco2 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[2],NSteps,nRolling2,nRolling2,"L2 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco3 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[3],NSteps,nRolling2,nRolling2,"L3 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco4 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[4],NSteps,nRolling2,nRolling2,"L4 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco5 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[5],NSteps,nRolling2,nRolling2,"L5 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
+  TGraph *grReco6 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[6],NSteps,nRolling2,nRolling2,"L6 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
 
   
   TFile *outroot = nullptr;
@@ -1140,7 +1154,7 @@ void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2){
 
  
 // Function to compute rolling average and create a new TGraph
-TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int windowSize, int everyNpoints, TString outputName, TString outputTitle) {
+TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int windowSize, int everyNpoints, TString outputName, TString outputTitle, bool doWeighted = true) {
   
     if (nPoints == 0) {
         std::cerr << "Error: Number of points is zero." << std::endl;
@@ -1166,7 +1180,12 @@ TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints
 	    
 	    double y = yValues[j];
 	    double dx = xValues[j+1] - xValues[j];
-            sumY += y*dx;
+	    if (doWeighted){
+	      sumY += y*dx;
+	    }
+	    else{
+	      sumY += y;
+	    }
             count += dx;
         }
 
@@ -1186,24 +1205,3 @@ TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints
     return averagedGraph;
 }
 
-// Function to compute rolling average and create a new TGraph
-TGraph* RollingAverage(const TGraph* originalGraph, int windowSize, int everyNpoints, TString outputName, TString outputTitle) {
-    if (!originalGraph) {
-        std::cerr << "Error: Original graph is null." << std::endl;
-        return nullptr;
-    }
-
-    int nPoints = originalGraph->GetN();
-    if (nPoints == 0) {
-        std::cerr << "Error: Original graph has no points." << std::endl;
-        return nullptr;
-    }
-
-    double x[nPoints], y[nPoints];
-    for (int i=0; i<nPoints; i++){
-      x[i] = originalGraph->GetPointX(i);
-      y[i] = originalGraph->GetPointY(i);
-    }
-
-    return RollingAverage(x,y,nPoints,windowSize,everyNpoints,outputName,outputTitle);
-}
