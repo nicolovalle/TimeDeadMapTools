@@ -76,10 +76,10 @@ const int N_LANES = 3816;
 const int N_STAVES_IB = 12+16+20;
 const int N_STAVES = 192;
 const int N_CHIPS = 24120;
-int LaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
-int LaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
-int LaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
-int LaneToLaneInLayer[N_LANES]; // filled by "getlanecoordinates" when called
+int vLaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
+int vLaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
+int vLaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
+int vLaneToLaneInLayer[N_LANES]; // filled by "getlanecoordinates" when called
 
 float LHCOrbitNS = 88924.6; // o2::constants::lhc::LHCOrbitNS
 
@@ -94,6 +94,11 @@ uint16_t StaveToLayer(uint16_t stv);
 uint16_t FirstLaneOfStave(uint16_t stv);
 uint16_t LastLaneOfStave(uint16_t stv);
 uint16_t ChipToLane(uint16_t chipid);
+uint16_t LaneToLayer(uint16_t laneid) { return vLaneToLayer[laneid];} 
+uint16_t LaneToStave(uint16_t laneid) { return vLaneToStave[laneid];}
+uint16_t LaneToStaveInLayer(uint16_t laneid) { return vLaneToStaveInLayer[laneid];}
+uint16_t LaneToLaneInLayer(uint16_t laneid) { return vLaneToLaneInLayer[laneid];}
+
 
 
 
@@ -215,7 +220,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH2F *hStatusTimeOL = new TH2F("Status vs time OL",Form("Run %d - Status vs time OL;Orbit;lane (stave number on the axis)",runnumber), hInbin, hIbins, N_LANES-N_LANES_IB-N_LANES_ML, N_LANES_IB+N_LANES_ML, N_LANES);
 
   TH1F *hStaveDeadTime = new TH1F("Stave dead time",Form("Run %d - Stave dead time;;dead time",runnumber), N_STAVES,0,N_STAVES);
-  for (int i=0; i < N_LANES; i++) hStaveDeadTime->GetXaxis()->SetBinLabel(LaneToStave[i]+1, Form("#color[%d]{L%d_%d}",1,LaneToLayer[i],LaneToStaveInLayer[i]));
+  for (int i=0; i < N_LANES; i++) hStaveDeadTime->GetXaxis()->SetBinLabel(LaneToStave(i)+1, Form("#color[%d]{L%d_%d}",1,LaneToLayer(i),LaneToStaveInLayer(i)));
 
   std::vector<TH1F*> hhLaneDeadTime;
   for (int il = 0; il<7; il++){
@@ -334,7 +339,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       
       if (lan < N_LANES_IB) IBdead++;
       else OBdead++;
-      int ilayer = LaneToLayer[lan];
+      int ilayer = LaneToLayer(lan);
       int ibarrel = (int)(ilayer > 2);
       LayerEfficiency[ilayer][countstep] += 1./ (NLanesPerStave[ilayer]*NStaves[ilayer]);
       BarrelEfficiency[ibarrel][countstep] += 1./((ibarrel <1) ? N_LANES_IB : (N_LANES - N_LANES_IB));
@@ -431,8 +436,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     
     if (i<N_LANES_IB) {dtimeIB += dtimeLane[i]; cib+=1;}
     else {dtimeOB += dtimeLane[i]; cob+=1;}
-    dtimeStave[LaneToStave[i]] += dtimeLane[i];
-    cst[LaneToStave[i]] += 1;
+    dtimeStave[LaneToStave(i)] += dtimeLane[i];
+    cst[LaneToStave(i)] += 1;
     
   }
   if (cib > 0) dtimeIB /= cib; else dtimeIB = 1.1111;
@@ -448,7 +453,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   QAcheck["Avg dead time IB"] = (dtimeIB < 0.03) ? "GOOD" : (dtimeIB < 0.10) ? "MEDIUM" : "BAD";
   QAcheck["Avg dead time OB"] = (dtimeOB < 0.05) ? "GOOD" : (dtimeOB < 0.10) ? "MEDIUM" : "BAD";
 
-  for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer[i]]->SetBinContent(LaneToLaneInLayer[i]+1,dtimeLaneNoRamp[i]);
+  for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer(i)]->SetBinContent(LaneToLaneInLayer(i)+1,dtimeLaneNoRamp[i]);
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,dtimeLane[i]);
   for (int i=0; i<N_STAVES; i++) if (dtimeStave[i]>0) hStaveDeadTime->SetBinContent(i+1, dtimeStave[i]);
   if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
@@ -647,7 +652,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c2->cd(1);
   hStatusTimeIB->Draw("col");    
   for (int i=0; i < N_LANES_IB; i+=9){
-    hStatusTimeIB->GetYaxis()->SetBinLabel(i+5,Form("%d",LaneToStaveInLayer[i]));
+    hStatusTimeIB->GetYaxis()->SetBinLabel(i+5,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
     p2lines[p2lines.size()-1]->SetLineColor(15);
     p2lines[p2lines.size()-1]->Draw("same");
@@ -659,7 +664,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c2->cd(2);
   hStatusTimeML->Draw("col");
   for (int i=N_LANES_IB; i < N_LANES_IB+N_LANES_ML; i+=16){
-    hStatusTimeML->GetYaxis()->SetBinLabel(i-N_LANES_IB+8,Form("%d",LaneToStaveInLayer[i]));
+    hStatusTimeML->GetYaxis()->SetBinLabel(i-N_LANES_IB+8,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
     p2lines[p2lines.size()-1]->SetLineColor(15);
     p2lines[p2lines.size()-1]->Draw("same");
@@ -670,7 +675,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c2->cd(3);
   hStatusTimeOL->Draw("col");
   for (int i=N_LANES_IB+N_LANES_ML; i < N_LANES; i+=28){
-    hStatusTimeOL->GetYaxis()->SetBinLabel(i-N_LANES_IB-N_LANES_ML+14,Form("%d",LaneToStaveInLayer[i]));
+    hStatusTimeOL->GetYaxis()->SetBinLabel(i-N_LANES_IB-N_LANES_ML+14,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
     p2lines[p2lines.size()-1]->SetLineColor(15);
     p2lines[p2lines.size()-1]->Draw("same");
@@ -868,8 +873,8 @@ void getlanecoordinates(int laneid, double *px, double *py){
   else if (laneob < (24+30)*4*4 + 42*7*4) { layer = 5; laneinlayer = laneob - (24+30)*4*4;}
   else { layer = 6; laneinlayer = laneob - (24+30)*4*4 - 42*7*4;}
 
-  LaneToLayer[laneid] = layer;
-  LaneToLaneInLayer[laneid] = laneinlayer;
+  vLaneToLayer[laneid] = layer;
+  vLaneToLaneInLayer[laneid] = laneinlayer;
 
   int nz = NZElementsInHalfStave[layer];
   int nseg = NSegmentsStave[layer];
@@ -881,8 +886,8 @@ void getlanecoordinates(int laneid, double *px, double *py){
   int stave = 0;
   for (int l=0; l<7; l++) stave += (l<layer)*NStaves[l]+(l==layer)*staveinlayer;
 
-  LaneToStave[laneid] = stave;
-  LaneToStaveInLayer[laneid] = staveinlayer;
+  vLaneToStave[laneid] = stave;
+  vLaneToStaveInLayer[laneid] = staveinlayer;
 
   
 
@@ -1005,7 +1010,7 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 	      elementlist.push_back(il);
 	    }
 	    else if (opt == "stave"){
-	      ndeadlanes[LaneToStave[il]]++;      
+	      ndeadlanes[LaneToStave(il)]++;      
 	    } // end opt == stave
 	  } // end of loop over dead lanes
 
