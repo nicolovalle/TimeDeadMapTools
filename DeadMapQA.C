@@ -112,7 +112,7 @@ void fillmap(TString fname);
 void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 
-TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle, bool doWeighted = false);
+TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle, bool doWeighted = true);
 
 void PrintAndExit(TString spec=""){
 
@@ -578,7 +578,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   c1->cd(6); // orbit gap, log scale
   //hOrb->Draw("histo");
   hGapdist->Draw("histo");
-  //gPad->SetLogy();
+  gPad->SetLogy();
 
   c1->cd(7); // IB and OB efficiency
   hEffOB->GetXaxis()->SetTitle("step");
@@ -589,7 +589,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hEffOB->Write();
   //hEffIB->Write();
 
-  c1->cd(8); // IB and OB efficiency vs time
+  c1->cd(8); //->SetLeftMargin(1./3); // IB and OB efficiency vs time
   grIBrolling->SetLineColor(kRed);
   grIBrolling->SetLineWidth(2);
   grOBrolling->SetLineColor(kBlue);
