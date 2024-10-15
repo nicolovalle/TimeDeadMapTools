@@ -18,14 +18,14 @@ The following files should be present in your working directory:
 - `Logger.h`
 - `token.dat`
 
-Make sure that `rundeadmap.py` is executable by running the following command, if necessary:
+Make the `rundeadmap.py` executable, if necessary:
 ```bash
 chmod +x rundeadmap.py
 ```
 
 ## Running the Script
 
-To generate the map, use the following command:
+To generate the map, jyst use the following command:
 ```bash
 ./rundeadmap.py <run_number>
 ```
@@ -84,7 +84,7 @@ Upon successful execution, your working directory will contain the following:
 - `DeadMapQA5.png`: The average time evolution of dead time for each layer.
 - `root.log`: Standard output and error logs from the command `root -b DeadMapQA.C`.
 
-## Quality Check
+## What to check
 
 The `main.log` file provides a summary of the process, including checks for the O2 workflow logs, orbit gaps in the map, and run duration versus map duration. It also flags any bad quality detected by the QA macro. 
 
