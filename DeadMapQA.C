@@ -203,6 +203,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
 
   QAcheck["Chip interval"] = "GOOD";
+  QAcheck["Null orbit"] = "GOOD";
 
   /*****************/
   /*****************/
@@ -214,8 +215,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TH1F *hEffOB = new TH1F("OB dead fraction","OB (blue) and IB (red) dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hEffIB = new TH1F("IB dead fraction","IB dead fraction",MAP.size()-1,1,MAP.size());
   TH1F *hTimeSpan = new TH1F("Time range","Time range;;sec",2,0,2);
-  
 
+  
   const Int_t hInbin = MAP.size()-1;
   Double_t hIbins[hInbin+1];
   for (int i=0; i < hInbin+1; i++) hIbins[i] = (Double_t)MAPKeys[i];
@@ -822,7 +823,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     outroot->Close();
   }
   
-  QALOG<<"Orbits: "<<firstorbit<<" to "<<currentorbit<<" corrsponding to "<<(currentorbit - firstorbit)*89.e-6 / 60.<<" minutes\n";
+  QALOG<<"Orbits: "<<firstorbit<<" to "<<currentorbit<<" corrsponding to "<<(currentorbit - firstorbit)* (LHCOrbitNS *1.e-9) / 60.<<" minutes\n";
 
   
   
@@ -1106,15 +1107,36 @@ void fillmap(TString fname){
 
   MAPKeys = obj->getEvolvingMapKeys();
 
-  QALOG<<"Orbit keys imported. Importing maps...\n";
+  if (MAPKeys.size() > 3){
+    QALOG<<"Orbit keys imported. Number of keys is "<<MAPKeys.size()<<": "<<MAPKeys[0]<<","<<MAPKeys[1]<<",...,"<<MAPKeys[MAPKeys.size()-2]<<","<<MAPKeys[MAPKeys.size()-1]<<"\n";
+  }
+  else{
+    QALOG<<"Orbit keys imported. Number of keys is "<<MAPKeys.size()<<"\n";
+  }
+  QALOG<<"Importing maps...\n"; 
   bool StaveStatus[N_STAVES]; // 1 = dead, 0 = alive
-  for (auto OO : MAPKeys){
+  bool isFirstOrbitZero = false;
+  bool isOtherOrbitZero = false;
+  bool isFirstMapAllDead = false;
+  for (int i=0; i<MAPKeys.size(); i++){
+    unsigned long OO = MAPKeys[i];
     std::vector<uint16_t> MapAtOrbit;
     obj->getMapAtOrbit(OO, MapAtOrbit);
     MAPNwords.push_back(MapAtOrbit.size());
     MAP[OO] = expandvector(MapAtOrbit,mapver,"lane");
     StaveMAP[OO] = expandvector(MapAtOrbit,mapver,"stave");
+    if (i==0){
+      isFirstOrbitZero = (OO == 0);
+      isFirstMapAllDead = (MAP[OO].size() == N_LANES);
+    }
+    else{
+      isOtherOrbitZero = (OO == 0);
+    }
+    
   }
+
+  if (isFirstOrbitZero && isFirstMapAllDead) QAcheck["Null orbit"] = "MEDIUM";
+  else if (isFirstOrbitZero || isOtherOrbitZero) QAcheck["Null orbit"] = "BAD";
 
   QALOG<<"... done importing maps for every orbit.\n";
 }
