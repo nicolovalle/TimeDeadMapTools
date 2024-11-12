@@ -668,21 +668,38 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     latex.DrawLatex(0.1,yPos,Form("%s : %s",cc.first.Data(),cc.second.Data()));
   }
 
-  std::vector<TLine*> p2lines;
+  std::vector<TLine*> p2lines{};
+  std::vector<TLine*> v5lines{};
   c2->cd(1);
-  hStatusTimeIB->Draw("col");    
+  hStatusTimeIB->Draw("axis");
+  for (unsigned long orbb = firstorbit + 300 / LHCOrbitNS * 1.e-9 ; orbb < currentorbit ; orbb += 300 / (LHCOrbitNS * 1.e-9)){ // one line every 5 mins
+    v5lines.push_back(new TLine(orbb, 0, orbb, N_LANES_IB));
+    v5lines[v5lines.size()-1]->SetLineColor(16);
+    v5lines[v5lines.size()-1]->SetLineStyle(7);
+    v5lines[v5lines.size()-1]->Draw("same");
+  }
+  hStatusTimeIB->Draw("col same");
   for (int i=0; i < N_LANES_IB; i+=9){
     hStatusTimeIB->GetYaxis()->SetBinLabel(i+5,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
     p2lines[p2lines.size()-1]->SetLineColor(15);
     p2lines[p2lines.size()-1]->Draw("same");
   }
+    
   hStatusTimeIB->GetYaxis()->SetTickLength(0);
   //hStatusTimeIB->Write();
  
 
   c2->cd(2);
-  hStatusTimeML->Draw("col");
+  hStatusTimeML->Draw("axis");
+  for (unsigned long orbb = firstorbit + 300 / LHCOrbitNS * 1.e-9 ; orbb < currentorbit ; orbb += 300 / (LHCOrbitNS * 1.e-9)){ // one line every 5 mins
+    v5lines.push_back(new TLine(orbb, N_LANES_IB, orbb, N_LANES_IB+N_LANES_ML));
+    v5lines[v5lines.size()-1]->SetLineColor(16);
+    v5lines[v5lines.size()-1]->SetLineStyle(7);
+    v5lines[v5lines.size()-1]->Draw("same");
+  }
+  
+  hStatusTimeML->Draw("col same");
   for (int i=N_LANES_IB; i < N_LANES_IB+N_LANES_ML; i+=16){
     hStatusTimeML->GetYaxis()->SetBinLabel(i-N_LANES_IB+8,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
@@ -693,7 +710,14 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   //hStatusTimeML->Write();
 
   c2->cd(3);
-  hStatusTimeOL->Draw("col");
+  hStatusTimeOL->Draw("axis");
+  for (unsigned long orbb = firstorbit + 300 / LHCOrbitNS * 1.e-9 ; orbb < currentorbit ; orbb += 300 / (LHCOrbitNS * 1.e-9)){ // one line every 5 mins
+    v5lines.push_back(new TLine(orbb, N_LANES_IB+N_LANES_ML, orbb, N_LANES));
+    v5lines[v5lines.size()-1]->SetLineColor(16);
+    v5lines[v5lines.size()-1]->SetLineStyle(7);
+    v5lines[v5lines.size()-1]->Draw("same");
+  }
+  hStatusTimeOL->Draw("col same");
   for (int i=N_LANES_IB+N_LANES_ML; i < N_LANES; i+=28){
     hStatusTimeOL->GetYaxis()->SetBinLabel(i-N_LANES_IB-N_LANES_ML+14,Form("%d",LaneToStaveInLayer(i)));
     p2lines.push_back(new TLine(firstorbit, i, currentorbit, i));
