@@ -635,6 +635,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   latex0.DrawLatex(0.1,yPos0,Form("RCT duration (sec): %7.1f",RCTrunduration));
   yPos0 -= 0.05;
   latex0.DrawLatex(0.1,yPos0,Form("MAP duration (sec): %7.1f",MAPduration));
+  auto it = std::find(MAPKeys.begin(), MAPKeys.end(), (unsigned long)0);
+  if (it != MAPKeys.end()){
+    yPos0 -= 0.05*2;
+    latex0.DrawLatex(0.1,yPos0,Form("MAP has orbit=0 at index %ld",std::distance(MAPKeys.begin(),it)));
+  }
   
   
  
