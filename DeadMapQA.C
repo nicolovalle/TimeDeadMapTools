@@ -41,6 +41,7 @@ std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stam
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
 bool writeRootFile = false; // can be changed as argument of the macro
+int mapSampling = -1; // Import only one key ever "mapSampling". Can be changed as argument of the macro. Use -1, 0 or 1 to import all the keys
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}, // L1
@@ -107,7 +108,7 @@ uint16_t LaneToLaneInLayer(uint16_t laneid) { return vLaneToLaneInLayer[laneid];
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, int version);
 
 
-void fillmap(TString fname);
+void fillmap(TString fname, int MapSampling);
 
 void RemoveAxis(TH2Poly *HP);
 void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
@@ -147,7 +148,7 @@ void PrintAndExit(TString spec=""){
 }
   
 //////////////// _ MAIN _ /////////////////////
-void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile){
+void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile, int MapSampling = mapSampling){
 
   RUN_I = runnumber;
   RUN_S = Form("%d",runnumber);
@@ -207,7 +208,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   /*****************/
   /*****************/
-  fillmap(FILENAME); // fill both MAP and SMAP, checking them. Exit if map is empty or default.
+  fillmap(FILENAME, MapSampling); // fill both MAP and SMAP, checking them. Exit if map is empty or default.
   /*****************/
   /*****************/
   
@@ -640,6 +641,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     yPos0 -= 0.05*2;
     latex0.DrawLatex(0.1,yPos0,Form("MAP has orbit=0 at index %ld",std::distance(MAPKeys.begin(),it)));
   }
+  if (MapSampling > 1){
+    yPos0 -= 0.05*2;
+    latex0.DrawLatex(0.1,yPos0,Form("THE MAP WAS SAMPLED! 1/%d",MapSampling));
+  }
+  
   
   
  
@@ -1086,7 +1092,7 @@ uint16_t ChipToLane(uint16_t chipid){
   else return N_LANES_IB + (uint16_t)(( chipid - N_LANES_IB) / 7);
 }
 
-void fillmap(TString fname){
+void fillmap(TString fname, int MapSampling){
 
   MAP.clear();
   MAPKeys.clear();
@@ -1142,12 +1148,38 @@ void fillmap(TString fname){
   else{
     QALOG<<"Orbit keys imported. Number of keys is "<<MAPKeys.size()<<"\n";
   }
+  
   QALOG<<"Importing maps...\n"; 
+  QALOG<<"Map sampling set to "<<MapSampling<<"\n";
+  
   bool StaveStatus[N_STAVES]; // 1 = dead, 0 = alive
   bool isFirstOrbitZero = false;
   bool isOtherOrbitZero = false;
   bool isFirstMapAllDead = false;
+  
+  if (MapSampling > 1){
+    QALOG<<"Map sampling set to one orbit evert "<<MapSampling<<"\n";
+    size_t count = 0;
+    auto itk = MAPKeys.begin();
+    while (itk != MAPKeys.end()){
+       if (count % MapSampling != 0) itk = MAPKeys.erase(itk);
+       else ++itk;
+       ++count;
+    }
+    if (MAPKeys.size() > 3){
+      QALOG<<"Orbit keys imported. Number of keys is "<<MAPKeys.size()<<": "<<MAPKeys[0]<<","<<MAPKeys[1]<<",...,"<<MAPKeys[MAPKeys.size()-2]<<","<<MAPKeys[MAPKeys.size()-1]<<"\n";
+    } 
+    else{
+      QALOG<<"Orbit keys imported. Number of keys is "<<MAPKeys.size()<<"\n";
+    }  
+  } // if MapSampling > 1
+  else{
+     QALOG<<"No map sampling requested. Importing all the keys\n";
+  } 
+    
+  
   for (int i=0; i<MAPKeys.size(); i++){
+       
     unsigned long OO = MAPKeys[i];
     std::vector<uint16_t> MapAtOrbit;
     obj->getMapAtOrbit(OO, MapAtOrbit);
