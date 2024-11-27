@@ -91,3 +91,54 @@ The `main.log` file provides a summary of the process, including checks for the 
 You can check for issues by searching for "WARN", "ERROR", or "FATAL" in the main script logs. If no such strings are found, everything likely ran successfully.
 
 If a QA issue is flagged, check the final lines of `DeadMapQA.log` and inspect the `.png` files for more details.
+
+## Automatic checks
+
+The following automatic checks are implemente in the `DeadMapQA.C` macro.
+
+- **Avg dead time IB**:
+  - `GOOD` if the average dead time of IB after the first 10 seconds is below 3%
+  - `MEDIUM` if it is below 10%
+  - `BAD` otherwise
+- **Avg dead time OB**:
+  - `GOOD` if the averga dead time of OB after the first 10 seconds is below 5%
+  - `MEDIUM` if it is below 10%
+  - `BAD` otherwise
+- **Chip interval**:
+  - `GOOD` if the chip IDs in the time-evolving part of the map are properly grouped into lanes
+  - `FATAL` otherwise
+- **Fully dead IB**:
+  - `GOOD` if the number of IB chips marked as dead in every step of the map is lower than 9
+  - `MEDIUM` if such number is less than 10% of the IB chips (i.e. less than 44)
+  - `BAD` otherwise
+- **Fully dead OB**:
+  - `GOOD` if the number of OB lanes with at least one chip which is always dead is lower than 68 (roughly 2% of the lanes)
+  - `BAD` otherwise
+- **Default object**:
+  - `FATAL' if the object is the default one
+  - Not declared otherwise
+- **Map size**:
+  - If the object is the default one:
+    - `GOOD` if both the static and time-evolving maps are empty
+    - `FATAL` otherwise
+  - If the object is not the default one:
+    - `GOOD` if both the statis and time-evolving maps have entries
+    - `BAD` if the static map is empty
+    - `FATAL` if the time-evolving map is empty
+- **Null orbit**:
+  - `GOOD` if orbit = 0 is not among the map keys
+  - `MEDIUM` if the map contains orbit = 0 and all the chips at that step are marked as bad
+  - `BAD` if the map contains orbit = 0 with alive chips, or if the map contains also negative orbits
+- **Orbit gaps**:
+  - `BAD` if there is at least one gap in between steps above 330k orbits (this is the "un-anchorable" threshold in the digitizer) or if more than 25% of the steps have gap above 380 TFs = 12160 orbits
+  - `MEDIUM` if there is at least one gap above 760 TFs or at least three gaps above 380 TFs. The BAD condition is evaluated first.
+  - `GOOD` otherwise
+- **Orbit range**:
+  - `GOOD` if the time interval covered by the map is within 5 seconds of the run duration as specified by the RCT ccdb object
+  - `MEDIUM` if the map's time interval exceeds the run duration by more than 5 seconds or is shorter by no more than 30 seconds
+  - `BAD` otherwise (i.e. the difference between the run duration and the map duration is larger than 30 seconds).
+- **Un-anchorable fraction**:
+  - This is the fraction of orbits within the total map range that are not anchorable to a map element by the digitizer. The digitizer rejects the map if the nearest orbit is more than 330k orbits away from the requested one.
+     - `GOOD` if the fraction is below 2% (consider than a single gap above 330k orbits is not expected, and it trigger a BAD "Orbit gaps" check).
+     - `MEDIUM` if the fraction is below 5%
+     - `BAD` otherwise

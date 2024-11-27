@@ -35,7 +35,7 @@ using namespace TMath;
 /// settings
 TString InputFile = "dmap.root";  // can be changed as argument of the macro
 TString logfilename = "DeadMapQA.log";
-double SecForTrgRamp = 15;
+double SecForTrgRamp = 10;
 bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
@@ -180,7 +180,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TCanvas *c5 = new TCanvas("QAsummary5","QAsummary5",2000,800);
   c5->Divide(7,2);
 
-  
+ 
   gStyle->SetOptStat(0);
   gStyle->SetPalette(kBlackBody);
   TColor::InvertPalette();
@@ -450,21 +450,21 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     
     dtimeLaneNoRamp[i] = (maprange > SecForTrgRamp) ? LHCOrbitNS * 1.e-9*(1.*dtimeLaneNoRamp[i]/(maprange-SecForTrgRamp)) : 0;
     
-    if (i<N_LANES_IB) {dtimeIB += dtimeLane[i]; cib+=1;}
-    else {dtimeOB += dtimeLane[i]; cob+=1;}
+    if (i<N_LANES_IB) {dtimeIB += dtimeLaneNoRamp[i]; cib+=1;}
+    else {dtimeOB += dtimeLaneNoRamp[i]; cob+=1;}
     dtimeStave[LaneToStave(i)] += dtimeLane[i];
     cst[LaneToStave(i)] += 1;
     
   }
-  if (cib > 0) dtimeIB /= cib; else dtimeIB = 1.1111;
-  if (cob > 0) dtimeOB /= cob; else dtimeOB = 1.1111;
+  if (cib > 0 && maprange > SecForTrgRamp) dtimeIB /= cib; else dtimeIB = 1.1111;
+  if (cob > 0 && maprange > SecForTrgRamp) dtimeOB /= cob; else dtimeOB = 1.1111;
   for (int i=0; i<N_STAVES; i++){
     if (cst[i]>0) dtimeStave[i] /= cst[i]; else dtimeStave[i] = 1.1111;
   }
   
 
-  QALOG<<"Average IB dead time: "<<dtimeIB<<"\n";
-  QALOG<<"Average OB dead time: "<<dtimeOB<<"\n";
+  QALOG<<"Average IB dead time (no trg ramp): "<<dtimeIB<<"\n";
+  QALOG<<"Average OB dead time (no trg ramp): "<<dtimeOB<<"\n";
 
   QAcheck["Avg dead time IB"] = (dtimeIB < 0.03) ? "GOOD" : (dtimeIB < 0.10) ? "MEDIUM" : "BAD";
   QAcheck["Avg dead time OB"] = (dtimeOB < 0.05) ? "GOOD" : (dtimeOB < 0.10) ? "MEDIUM" : "BAD";
@@ -1130,10 +1130,13 @@ void fillmap(TString fname, int MapSampling){
     if (obj->getEvolvingMapSize() == 0 && StaticMap.size() == 0){
       QAcheck["Map size"] = "GOOD";
     }
+    else {
+      QAcheck["Map size"] = "FATAL";
+    }
     QAcheck["Default object"] = "FATAL";
     PrintAndExit("Exiting because default object");
   }
-  if (obj->getEvolvingMapSize() == 0){
+  else if (obj->getEvolvingMapSize() == 0){
     QAcheck["Map size"] = "FATAL";
     PrintAndExit("Exiting because evolving map is empty");
   }
