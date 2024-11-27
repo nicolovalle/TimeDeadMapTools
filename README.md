@@ -92,7 +92,7 @@ You can check for issues by searching for "WARN", "ERROR", or "FATAL" in the mai
 
 If a QA issue is flagged, check the final lines of `DeadMapQA.log` and inspect the `.png` files for more details.
 
-## Automatic checks
+### Automatic checks
 
 The following automatic checks are implemente in the `DeadMapQA.C` macro.
 
@@ -115,7 +115,7 @@ The following automatic checks are implemente in the `DeadMapQA.C` macro.
   - `GOOD` if the number of OB lanes with at least one chip which is always dead is lower than 68 (roughly 2% of the lanes)
   - `BAD` otherwise
 - **Default object**:
-  - `FATAL' if the object is the default one
+  - `FATAL` if the object is the default one
   - Not declared otherwise
 - **Map size**:
   - If the object is the default one:
