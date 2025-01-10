@@ -73,6 +73,7 @@ const int NStaves[7] = { 12, 16, 20, 24, 30, 42, 48 };
 const int NZElementsInHalfStave[7] =  {9,9,9, 4, 4, 7, 7};
 const int NSegmentsStave[7] = {1, 1, 1, 4, 4, 4, 4};
 const int NLanesPerStave[7] = {9, 9, 9, 16, 16, 28, 28};
+const int NChipsPerLane[7] = {1, 1, 1, 7, 7, 7, 7};
 const int N_LANES_IB = 432;
 const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
@@ -86,6 +87,11 @@ int vLaneToLaneInLayer[N_LANES]; // filled by "getlanecoordinates" when called
 
 float LHCOrbitNS = 88924.6; // o2::constants::lhc::LHCOrbitNS
 
+const std::vector<TString> qualityBit = {
+  "kIsGoodITSLayer3",
+  "kIsGoodITSLayer0123",
+  "kIsGoodITSLayerAll"
+};
 
 
 void interpolatestave(double r1, double r2, double phi1, double phi2, int z, int nz, int a, int na, TVector2 *TVec);
@@ -102,11 +108,9 @@ uint16_t LaneToStave(uint16_t laneid) { return vLaneToStave[laneid];}
 uint16_t LaneToStaveInLayer(uint16_t laneid) { return vLaneToStaveInLayer[laneid];}
 uint16_t LaneToLaneInLayer(uint16_t laneid) { return vLaneToLaneInLayer[laneid];}
 
-
-
+bool getQualityBit(std::vector<uint16_t> v, TString qb);
 
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, int version);
-
 
 void fillmap(TString fname, int MapSampling);
 
@@ -179,6 +183,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   TCanvas *c5 = new TCanvas("QAsummary5","QAsummary5",2000,800);
   c5->Divide(7,2);
+
+  TCanvas *c6 = new TCanvas("QAsummary6","QAsummary6",900,300);
+  c5->Divide(3,1);
 
  
   gStyle->SetOptStat(0);
@@ -309,6 +316,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   double BarrelEfficiency[2][NSteps];
   double LayerEfficiency[7][NSteps];
 
+  double QualityBit[qualityBit.size()][NSteps];
+
   
   for (auto M : MAP){
 
@@ -331,6 +340,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     currentorbit = M.first;
 
     TimeStampFromStart[countstep] = (currentorbit - firstorbit) * LHCOrbitNS * 1.e-9;
+
+    for (int iq = 0; iq < qualityBit.size(); iq++){
+      QualityBit[iq][countstep] = getQualityBit(M.second, qualityBit[iq]);
+    }
     
 
     int OBdead = 0, IBdead = 0;
@@ -533,7 +546,11 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   TGraph *grReco4 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[4],NSteps,nRolling2,nRolling2,"L4 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
   TGraph *grReco5 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[5],NSteps,nRolling2,nRolling2,"L5 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
   TGraph *grReco6 = RollingAverage(TimeStampFromStart,staveRecoveryLayer[6],NSteps,nRolling2,nRolling2,"L6 recoveries rolling average",Form("Recoveries %d steps rolling average;time(min);Recoveries per sec",nRolling2),false);
-
+  
+  TGraph *grQB0 = RollingAverage(TimeStampFromStart,QualityBit[0],NSteps,60,60,qualityBit[0],Form("%s, %d steps average;time(min);Good fraction",qualityBit[0].Data(),60),true);
+  TGraph *grQB1 = RollingAverage(TimeStampFromStart,QualityBit[1],NSteps,60,60,qualityBit[1],Form("%s, %d steps average;time(min);Good fraction",qualityBit[1].Data(),60),true);
+  TGraph *grQB2 = RollingAverage(TimeStampFromStart,QualityBit[2],NSteps,60,60,qualityBit[2],Form("%s, %d steps average;time(min);Good fraction",qualityBit[2].Data(),60),true);
+  
   
   TFile *outroot = nullptr;
   if (WriteRootFile){
@@ -556,6 +573,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     grReco4->Write();
     grReco5->Write();
     grReco6->Write();
+    grQB0->Write();
+    grQB1->Write();
+    grQB2->Write();
   }
   
  
@@ -773,7 +793,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   c5->cd(1);
   grEff0->SetMarkerStyle(20);
-  grEff0->Draw();
+  grEff0->Draw("APL");
   gPad->SetLogy();
 
   c5->cd(2);
@@ -842,16 +862,27 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   gPad->SetLogy();
   
   
+  c6->cd(1);
+  grQB0->SetMarkerStyle(20);
+  grQB0->Draw();
+
+  c6->cd(2);
+  grQB1->SetMarkerStyle(20);
+  grQB1->Draw();
+
+  c6->cd(3);
+  grQB2->SetMarkerStyle(20);
+  grQB2->Draw();
   
 
-  //c1->Write();
-  //c2->Write();
-  //c3->Write();
+  
+  c5->SaveAs(Form("%s/DeadMapQA5.png",outdir.Data()));
+  c6->SaveAs(Form("%s/DeadMapQA6.png",outdir.Data()));
   c1->SaveAs(Form("%s/DeadMapQA1.png",outdir.Data()));
   c2->SaveAs(Form("%s/DeadMapQA2.png",outdir.Data()));
   c3->SaveAs(Form("%s/DeadMapQA3.png",outdir.Data()));
   c4->SaveAs(Form("%s/DeadMapQA4.png",outdir.Data()));
-  c5->SaveAs(Form("%s/DeadMapQA5.png",outdir.Data()));
+  
   
 
   if (WriteRootFile){
@@ -1092,6 +1123,38 @@ uint16_t ChipToLane(uint16_t chipid){
   else return N_LANES_IB + (uint16_t)(( chipid - N_LANES_IB) / 7);
 }
 
+
+bool getQualityBit(std::vector<uint16_t> v, TString qb){
+
+  int nDeadPerLayer[7] = {0,0,0,0,0,0,0};
+
+  for (uint16_t c : v){
+    nDeadPerLayer[LaneToLayer(ChipToLane(c))]++;
+  }
+
+  uint8_t goodlayers_v0 = 0x0;
+
+  for (int ilay = 0; ilay < 7; ilay++){
+    if (nDeadPerLayer[ilay] < NLanesPerStave[ilay]*NChipsPerLane[ilay]){
+      goodlayers_v0 |= (1 << ilay); // set bit = good
+    }
+  }
+
+  if (qb == "kIsGoodITSLayer3"){
+    return ((goodlayers_v0 & 0b1000) == 0b1000);
+  }
+  else if (qb == "kIsGoodITSLayer0123"){
+    return ((goodlayers_v0 & 0b1111) == 0b1111);
+  }
+  else if (qb == "kIsGoodITSLayerAll"){
+    return (goodlayers_v0 == 0b1111111);
+  }
+
+  QALOG<<"ERROR - Requested invalid qualityBit = "<<qb<<", returning FALSE.\n";
+  return false;
+   
+}
+
 void fillmap(TString fname, int MapSampling){
 
   MAP.clear();
@@ -1275,7 +1338,7 @@ TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints
             count += dx;
         }
 
-        double avgY = sumY / count;
+        double avgY = (count > 0) ? sumY / count : 0.0;
 
 	if (i % everyNpoints == 0){ 
 	  newX.push_back(x);
