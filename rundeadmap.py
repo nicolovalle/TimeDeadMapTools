@@ -154,6 +154,8 @@ if __name__ == "__main__":
         execute('head -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" > '+ctflist)
         execute('grep '+targetEPN+' '+targetdir+'/full_ctf_list.dat | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
         execute('tail -n 1 '+targetdir+'/full_ctf_list.dat | grep -v '+targetEPN+' | sed "s_/alice/_alien:///alice/_" >> '+ctflist)
+        #execute('cp '+targetdir+'/full_ctf_list.dat '+ctflist)
+        #execute('sed -i "s_/alice/_alien:///alice/_g" '+ctflist)
         
         with open(ctflist, 'r') as ctfile:
             line_count = sum(1 for line in ctfile)
