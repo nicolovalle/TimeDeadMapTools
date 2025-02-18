@@ -12,6 +12,7 @@
 ////   2) The map must not be empty or the default object
 ////   3) The first orbit of the map must be meaningful (not zero or negative)
 ////   4) The total orbit span of the map should be similar to the run duration
+////   5) The maximum gap between consecutive map elements must be small
 ////
 //// For suggestions, or to report errors: nicolo.valle@cern.ch
 ////
@@ -33,6 +34,7 @@
 
 float LHCOrbitNS = 88924.6;
 std::string ccdbHost = "http://alice-ccdb.cern.ch";
+std::string detector = "ITS";
 
 std::map<int, TString> PrintInfo;
 
@@ -109,8 +111,8 @@ void DownloadAndCheck(int run){
 
   myLOG<<"INFO - Checking deadmap object for run "<<run<<"\n";
 
-  auto* obj0 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>("ITS/Calib/TimeDeadMap",runstop);
-  auto* obj1 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>("ITS/Calib/TimeDeadMap",runstart);
+  auto* obj0 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>(detector+"/Calib/TimeDeadMap",runstop);
+  auto* obj1 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>(detector+"/Calib/TimeDeadMap",runstart);
 
   if (obj0->isDefault() && obj1->isDefault()){
     myLOG<<"ERROR - Object for run "<<run<<" is missing. Only default object has been found. Report to experts.\n";
@@ -138,6 +140,19 @@ void DownloadAndCheck(int run){
   myLOG<<"INFO - map version: "<<obj0->getMapVersion()<<"\n";
   myLOG<<"INFO - number of orbits in the map: "<<obj0->getEvolvingMapKeys().size()<<"\n";
 
+  int nTooLargeGaps = 0;
+  for (int ikey = 1; ikey< obj0->getEvolvingMapKeys().size(); ikey++){
+    if ( (long)obj0->getEvolvingMapKeys().at(ikey) - obj0->getEvolvingMapKeys().at(ikey-1) > 330000){
+      nTooLargeGaps++;
+    }
+  }
+
+  if (nTooLargeGaps > 0){
+    myLOG<<"ERROR - There are "<<nTooLargeGaps<<" orbit gaps exceeding 330k orbits\n";
+    PrintInfo[run] += Form(" - ERROR: orbit gap exceeds 330k orbits %d times",nTooLargeGaps);
+  }
+    
+
   long firstorbit = (long)obj0->getEvolvingMapKeys().front();
   long lastorbit = (long)obj0->getEvolvingMapKeys().back();
 
@@ -146,7 +161,7 @@ void DownloadAndCheck(int run){
 
 
   if (firstorbit < 1){
-    PrintInfo[run] += Form(" WARNING - first orbit saved in the map is %ld",firstorbit);
+    PrintInfo[run] += Form(" - WARNING - first orbit saved in the map is %ld",firstorbit);
     if (obj0->getEvolvingMapKeys().size() > 2){
       mapduration = (lastorbit - (long)obj0->getEvolvingMapKeys().at(1)) * (LHCOrbitNS * 1.e-9);
     }
