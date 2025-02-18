@@ -155,7 +155,7 @@ void DownloadAndCheck(int run){
     }
   }
 
-  if (nTooLargeGaps > 0 && firstorbit > 0){
+  if ((nTooLargeGaps > 0 && firstorbit > 0) || nTooLargeGaps > 1){
     myLOG<<"ERROR - There are "<<nTooLargeGaps<<" orbit gaps exceeding 330k orbits\n";
     PrintInfo[run] += Form(" - ERROR: orbit gap exceeds 330k orbits %d times",nTooLargeGaps);
   }
