@@ -1,0 +1,150 @@
+#include <string>
+#include <fstream>
+#include <iostream>
+#include <algorithm>
+
+#include <map>
+#include <vector>
+
+#include <TMath.h>
+
+#include "DataFormatsITSMFT/TimeDeadMap.h"
+
+#define myLOG std::cout<<"_______"
+
+
+float LHCOrbitNS = 88924.6;
+std::string ccdbHost = "http://alice-ccdb.cern.ch";
+
+std::map<int, TString> PrintInfo;
+
+void DownloadAndCheck(int run);
+
+void SimpleDeadMapCheck(const TString& input){
+
+  PrintInfo = std::map<int, TString>{};
+
+  int run = -1;
+  // if input is a run number...
+  if (input.IsDigit()){
+    run = input.Atoi();
+    DownloadAndCheck(run);
+  }
+
+
+  // if input is a text file...
+  else{
+    std::ifstream file(input.Data());
+
+    if (!file.is_open()){
+      std::cerr<<"Error: Unable to open file "<<input<<std::endl;
+      return;
+    }
+    std::string line;
+    while (std::getline(file, line)){
+      std::stringstream ss(line);
+      if (ss >> run){
+	DownloadAndCheck(run);
+      }
+    }
+    file.close();
+  }
+
+  myLOG<<"=================\n";
+  myLOG<<"==== SUMMARY ====\n";
+  myLOG<<"=================\n";
+  for (auto i : PrintInfo){
+    myLOG<<"Run "<<i.first<<i.second<<"\n";
+  }
+
+  return;
+}
+
+
+void DownloadAndCheck(int run){
+
+  PrintInfo[run] = TString();
+
+  long runstart = -1, runstop = -1;
+  bool queryError = false;
+  
+  if (run <= 0){
+    myLOG<<"FATAL - invalid run number provided\n";
+    queryError = true;
+    return;
+  }
+
+  myLOG<<"INFO - Reading start/stop timestamps for run "<<run<<"\n";
+
+  auto& cm = o2::ccdb::BasicCCDBManager::instance();
+  cm.setURL(ccdbHost);
+  auto lims = cm.getRunDuration(run);
+  if (lims.first == 0 || lims.second == 0) {
+    myLOG<<"ERROR - failed to fetch run info from RCT for run "<<run<<"\n";
+    queryError = true;
+    PrintInfo[run]+=" - ERROR: failed to fetch run info from ccdb";
+    return;
+  }
+
+  runstart = (long)lims.first;
+  runstop = (long)lims.second;
+
+  myLOG<<"INFO - Checking deadmap object for run "<<run<<"\n";
+
+  auto* obj0 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>("ITS/Calib/TimeDeadMap",runstop);
+  auto* obj1 = cm.getForTimeStamp<o2::itsmft::TimeDeadMap>("ITS/Calib/TimeDeadMap",runstart);
+
+  if (obj0->isDefault() && obj1->isDefault()){
+    myLOG<<"ERROR - Object for run "<<run<<" is missing. Only default object has been found. Report to experts.\n";
+    PrintInfo[run] +=" - ERROR: default object fetched";
+    queryError = true;
+  }
+  
+  else if (obj0->isDefault() || obj1->isDefault() || obj0->getEvolvingMapKeys() != obj1->getEvolvingMapKeys()){
+    myLOG<<"ERROR - Start and Stop timestamps of run "<<run<<" result in different ccdb objects. Report to experts.\n";
+    PrintInfo[run] +=" - ERROR: mismatch between queries at start and stop of the run";
+    queryError = true;
+  }
+
+  if (obj0->getEvolvingMapKeys().size() < 1){
+    myLOG<<"ERROR - The time-evolving map is empty\n";
+    myLOG<<" - ERROR: the time-evolving map is empty";
+    queryError = true;
+  }
+
+  if (queryError){
+    return;
+  }
+
+
+  myLOG<<"INFO - map version: "<<obj0->getMapVersion()<<"\n";
+  myLOG<<"INFO - number of orbits in the map: "<<obj0->getEvolvingMapKeys().size()<<"\n";
+
+  long firstorbit = (long)obj0->getEvolvingMapKeys().front();
+  long lastorbit = (long)obj0->getEvolvingMapKeys().back();
+
+  double runduration = (runstop - runstart)/1000.;
+  double mapduration = (lastorbit - firstorbit) * (LHCOrbitNS * 1.e-9);
+
+
+  if (firstorbit < 1){
+    PrintInfo[run] += Form(" WARNING - first orbit saved in the map is %ld",firstorbit);
+    if (obj0->getEvolvingMapKeys().size() > 2){
+      mapduration = (lastorbit - (long)obj0->getEvolvingMapKeys().at(1)) * (LHCOrbitNS * 1.e-9);
+    }
+  }
+
+  if (TMath::Abs(runduration - mapduration) <= 5){
+    PrintInfo[run] += Form(" - run duration: %.0f sec, map duration: %.0f sec: OK",runduration,mapduration);
+  }
+  else if (TMath::Abs(runduration - mapduration) <= 60){
+    PrintInfo[run] += Form(" - WARNING - run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
+  }
+  else{
+    PrintInfo[run] += Form(" - ERROR - run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
+  }
+
+    
+  return;
+  
+}
