@@ -10,8 +10,8 @@
 //// Errors and warnings out of the following checks are printed at the end:
 ////   1) By querying the start-of-run and end-of-run timestamps the same object must be retrieved
 ////   2) The map must not be empty or the default object
-////   3) The first orbit of the run must be meaningful (not zero or negative)
-////   4) The total orbit span of the time should be close to the run duration
+////   3) The first orbit of the map must be meaningful (not zero or negative)
+////   4) The total orbit span of the map should be similar to the run duration
 ////
 //// For suggestions, or to report errors: nicolo.valle@cern.ch
 ////
