@@ -29,7 +29,7 @@
 
 #include "DataFormatsITSMFT/TimeDeadMap.h"
 
-#define myLOG std::cout<<"_______"
+#define myLOG std::cout<<"_________"
 
 
 float LHCOrbitNS = 88924.6;
@@ -140,18 +140,6 @@ void DownloadAndCheck(int run){
   myLOG<<"INFO - map version: "<<obj0->getMapVersion()<<"\n";
   myLOG<<"INFO - number of orbits in the map: "<<obj0->getEvolvingMapKeys().size()<<"\n";
 
-  int nTooLargeGaps = 0;
-  for (int ikey = 1; ikey< obj0->getEvolvingMapKeys().size(); ikey++){
-    if ( (long)obj0->getEvolvingMapKeys().at(ikey) - obj0->getEvolvingMapKeys().at(ikey-1) > 330000){
-      nTooLargeGaps++;
-    }
-  }
-
-  if (nTooLargeGaps > 0){
-    myLOG<<"ERROR - There are "<<nTooLargeGaps<<" orbit gaps exceeding 330k orbits\n";
-    PrintInfo[run] += Form(" - ERROR: orbit gap exceeds 330k orbits %d times",nTooLargeGaps);
-  }
-    
 
   long firstorbit = (long)obj0->getEvolvingMapKeys().front();
   long lastorbit = (long)obj0->getEvolvingMapKeys().back();
@@ -159,9 +147,21 @@ void DownloadAndCheck(int run){
   double runduration = (runstop - runstart)/1000.;
   double mapduration = (lastorbit - firstorbit) * (LHCOrbitNS * 1.e-9);
 
+  int nTooLargeGaps = 0;
+  for (int ikey = 1; ikey< obj0->getEvolvingMapKeys().size(); ikey++){
+    if ( (long)obj0->getEvolvingMapKeys().at(ikey) - obj0->getEvolvingMapKeys().at(ikey-1) > 330000){
+      nTooLargeGaps++;
+    }
+  }
+
+  if (nTooLargeGaps > 0 && firstorbit > 0){
+    myLOG<<"ERROR - There are "<<nTooLargeGaps<<" orbit gaps exceeding 330k orbits\n";
+    PrintInfo[run] += Form(" - ERROR: orbit gap exceeds 330k orbits %d times",nTooLargeGaps);
+  }
+
 
   if (firstorbit < 1){
-    PrintInfo[run] += Form(" - WARNING - first orbit saved in the map is %ld",firstorbit);
+    PrintInfo[run] += Form(" - WARNING: first orbit saved in the map is %ld",firstorbit);
     if (obj0->getEvolvingMapKeys().size() > 2){
       mapduration = (lastorbit - (long)obj0->getEvolvingMapKeys().at(1)) * (LHCOrbitNS * 1.e-9);
     }
