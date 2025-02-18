@@ -138,10 +138,10 @@ void DownloadAndCheck(int run){
     PrintInfo[run] += Form(" - run duration: %.0f sec, map duration: %.0f sec: OK",runduration,mapduration);
   }
   else if (TMath::Abs(runduration - mapduration) <= 60){
-    PrintInfo[run] += Form(" - WARNING - run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
+    PrintInfo[run] += Form(" - WARNING: run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
   }
   else{
-    PrintInfo[run] += Form(" - ERROR - run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
+    PrintInfo[run] += Form(" - ERROR: run duration: %.0f sec, map duration: %.0f sec.",runduration,mapduration);
   }
 
     
