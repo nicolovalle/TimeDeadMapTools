@@ -128,7 +128,7 @@ void DownloadAndCheck(int run){
 
   if (obj0->getEvolvingMapKeys().size() < 1){
     myLOG<<"ERROR - The time-evolving map is empty\n";
-    PrintInfo[run]<<" - ERROR: the time-evolving map is empty";
+    PrintInfo[run] +=" - ERROR: the time-evolving map is empty";
     queryError = true;
   }
 
