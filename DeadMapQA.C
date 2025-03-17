@@ -21,6 +21,7 @@
 #include <TStyle.h>
 #include <TGraph.h>
 #include <TMath.h>
+#include <nlohmann/json.hpp>
 
 #include "Logger.h"
 
@@ -40,7 +41,8 @@ bool ExitWhenFinish = true;
 std::string ccdbHost = "http://alice-ccdb.cern.ch"; // for RCT and CTP time stamps
 Long_t NominalGap = 380*32;  // Online workflow: [350,370] TF
 Long_t UnanchorableThreshold = 330000;
-bool writeRootFile = false; // can be changed as argument of the macro
+bool acceptSingleChips = true; 
+bool writeAuxiliaryFile = true; // can be changed as argument of the macro
 int mapSampling = -1; // Import only one key ever "mapSampling". Can be changed as argument of the macro. Use -1, 0 or 1 to import all the keys
 const std::vector<std::vector<int>> Enabled{ // not in use yet
   {0,1,2,3,4,5,6,7,8,9,10,11}, // L0
@@ -58,12 +60,13 @@ const std::vector<std::vector<int>> Enabled{ // not in use yet
 // global variables handled by the functions
 int RUN_I;
 TString RUN_S;
-std::map<unsigned long, std::vector<uint16_t>> MAP;
+std::map<unsigned long, std::vector<uint16_t>> MAP;  // MAP[orbit] = vector of dead chip IDs 
 std::vector<unsigned long> MAPKeys;
 std::vector<int> MAPNwords;
 std::vector<uint16_t> SMAP;
 std::map<unsigned long, std::vector<uint16_t>> StaveMAP; //array of staID with all the lanes dead
 std::map<TString, TString> QAcheck;
+int singleDeadChips[24120]; //singleDeadChips[chip] = number of steps that chips was dead without being in a dead lane
 long runstart = -1, mapstart = -1, runstop = -1, mapstop = -1;
 Logger QALOG;
 
@@ -74,12 +77,14 @@ const int NZElementsInHalfStave[7] =  {9,9,9, 4, 4, 7, 7};
 const int NSegmentsStave[7] = {1, 1, 1, 4, 4, 4, 4};
 const int NLanesPerStave[7] = {9, 9, 9, 16, 16, 28, 28};
 const int NChipsPerLane[7] = {1, 1, 1, 7, 7, 7, 7};
+const int NChipsPerLayer[7] = {12*9, 16*9, 20*9, 24*112, 30*112, 42*196, 48*196};
 const int N_LANES_IB = 432;
 const int N_LANES_ML = 864; // L3,4
 const int N_LANES = 3816;
 const int N_STAVES_IB = 12+16+20;
 const int N_STAVES = 192;
 const int N_CHIPS = 24120;
+const int N_CHIPS_IB = N_LANES_IB;
 int vLaneToLayer[N_LANES]; // filled by "getlanecoordinates" when called
 int vLaneToStave[N_LANES]; // filled by "getlanecoordinates" when called
 int vLaneToStaveInLayer[N_LANES]; // filled by "getlanecoordinates" when called
@@ -107,6 +112,8 @@ uint16_t LaneToLayer(uint16_t laneid) { return vLaneToLayer[laneid];}
 uint16_t LaneToStave(uint16_t laneid) { return vLaneToStave[laneid];}
 uint16_t LaneToStaveInLayer(uint16_t laneid) { return vLaneToStaveInLayer[laneid];}
 uint16_t LaneToLaneInLayer(uint16_t laneid) { return vLaneToLaneInLayer[laneid];}
+uint16_t LaneToQCFEE(uint16_t laneid);
+uint16_t ChipToChipInLayer(uint16_t chipid); 
 
 bool getQualityBit(std::vector<uint16_t> v, TString qb);
 
@@ -120,6 +127,15 @@ void GetTimeStamps(int runnumber, uint32_t orbit1, uint32_t orbit2);
 TGraph* RollingAverage(const double* xValues, const double* yValues, int nPoints, int everyNpoints, int windowSize, TString outputName, TString outputTitle, bool doWeighted = true);
 
 void PrintAndExit(TString spec=""){
+
+  for (int i : SMAP){
+    singleDeadChips[i] = 0;
+  }
+  for (int i = 0; i<N_CHIPS;i++){
+    if (singleDeadChips[i] > 0){
+      QALOG<<"Single chip "<<i<<" (lane "<<ChipToLane(i)<<", chip "<<ChipToChipInLayer(i)<<" in layer "<<LaneToLayer(ChipToLane(i))<<", QCFEE "<<LaneToQCFEE(ChipToLane(i))<<") potentially not in a dead lane "<<singleDeadChips[i]<<" times\n";
+    }
+  }
 
   QALOG<<"\nQA SUMMARY\n";
 
@@ -152,13 +168,14 @@ void PrintAndExit(TString spec=""){
 }
   
 //////////////// _ MAIN _ /////////////////////
-void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteRootFile = writeRootFile, int MapSampling = mapSampling){
+void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteAuxiliaryFile = writeAuxiliaryFile, int MapSampling = mapSampling){
 
   RUN_I = runnumber;
   RUN_S = Form("%d",runnumber);
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
+  for (int i=0; i< N_CHIPS; i++) singleDeadChips[i]=0;
 
   QALOG<<"Checking file "<<FILENAME<<". Run "<<runnumber<<"\n";
 
@@ -342,7 +359,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     TimeStampFromStart[countstep] = (currentorbit - firstorbit) * LHCOrbitNS * 1.e-9;
 
     for (int iq = 0; iq < qualityBit.size(); iq++){
-      QualityBit[iq][countstep] = getQualityBit(M.second, qualityBit[iq]);
+      QualityBit[iq][countstep] = 0; // TO BE UPDATED SINCE M.second is vector of chips. <--- getQualityBit(M.second, qualityBit[iq]);
     }
     
 
@@ -350,7 +367,9 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     for (int ib = 0; ib<2; ib++) BarrelEfficiency[ib][countstep] = 0.;
     for (int il = 0; il<7; il++) LayerEfficiency[il][countstep] = 0.;
     
-    for (uint lan : M.second) {
+    for (uint chi : M.second) {
+
+      uint16_t lan = ChipToLane(chi);
 
       if (lan < N_LANES_IB) hStatusTimeIB->Fill(currentorbit+1, lan); // "+1" to avoid edge effect in conversion from long to double
       else if (lan < N_LANES_IB + N_LANES_ML) hStatusTimeML->Fill(currentorbit+1, lan);
@@ -360,8 +379,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
       else OBdead++;
       int ilayer = LaneToLayer(lan);
       int ibarrel = (int)(ilayer > 2);
-      LayerEfficiency[ilayer][countstep] += 1./ (NLanesPerStave[ilayer]*NStaves[ilayer]);
-      BarrelEfficiency[ibarrel][countstep] += 1./((ibarrel <1) ? N_LANES_IB : (N_LANES - N_LANES_IB));
+      LayerEfficiency[ilayer][countstep] += 1./ (NChipsPerLane[ilayer]*NLanesPerStave[ilayer]*NStaves[ilayer]);
+      BarrelEfficiency[ibarrel][countstep] += 1./((ibarrel <1) ? N_CHIPS_IB : (N_CHIPS - N_CHIPS_IB));
     }
 
     if ( (maprange < SecForTrgRamp) || TimeStampFromStart[countstep] > SecForTrgRamp ){ // save worst cases after SecForTrgRamp seconds if the map lasts at least SecForTrgRamp seconds
@@ -378,13 +397,15 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     }
       
     if (countstep > 0){
-      hEffOB->SetBinContent(countstep,1.*OBdead/(N_LANES-N_LANES_IB));
-      hEffIB->SetBinContent(countstep,1.*IBdead/N_LANES_IB);
+      hEffOB->SetBinContent(countstep,1.*OBdead/(N_CHIPS-N_CHIPS_IB));
+      hEffIB->SetBinContent(countstep,1.*IBdead/N_CHIPS_IB);
     }
 
-    for (uint ii : M.second) {
-      dtimeLane[ii] += (currentorbit - previousorbit);
-      if (TimeStampFromStart[countstep] > SecForTrgRamp) dtimeLaneNoRamp[ii] += (currentorbit - previousorbit);
+    for (uint chi : M.second) {
+      int ilane = ChipToLane(chi);
+      int ilayer = LaneToLayer(ilane);
+      dtimeLane[ilane] += (currentorbit - previousorbit)/NChipsPerLane[ilayer];
+      if (TimeStampFromStart[countstep] > SecForTrgRamp) dtimeLaneNoRamp[ilane] += (currentorbit - previousorbit)/NChipsPerLane[ilayer];
     }
 
     // step up
@@ -452,7 +473,10 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   }
   
 
-  for (uint chip : MAP.rbegin()->second) LastMAP->SetBinContent(chip+1,1); 
+  for (uint chip : MAP.rbegin()->second){
+    uint ilane = ChipToLane(chip);
+    LastMAP->SetBinContent(ilane+1,1+LastMAP->GetBinContent(ilane+1));
+  }
 
   double dtimeIB=0, dtimeOB=0, cib=0, cob=0; // average dead time over lanes. dtimeLane[i] is the dead time for lane i
   double dtimeStave[N_STAVES]; double cst[N_STAVES]; for (int i=0; i<N_STAVES;i++) dtimeStave[i]=cst[i]=0; // average dead time staves
@@ -485,8 +509,18 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   for (int i=0; i<nn; i++) hhLaneDeadTime[LaneToLayer(i)]->SetBinContent(LaneToLaneInLayer(i)+1,dtimeLaneNoRamp[i]);
   for (int i=0; i<nn; i++) HMAP->SetBinContent(i+1,dtimeLane[i]);
   for (int i=0; i<N_STAVES; i++) if (dtimeStave[i]>0) hStaveDeadTime->SetBinContent(i+1, dtimeStave[i]);
-  if (worstOBorbit > 0) for (uint chip : MAP[worstOBorbit]) WorstOB->SetBinContent(chip+1,1);
-  if (worstIBorbit > 0) for (uint chip : MAP[worstIBorbit]) WorstIB->SetBinContent(chip+1,1);
+  if (worstOBorbit > 0) {
+    for (uint chip : MAP[worstOBorbit]) {
+      uint ilane = ChipToLane(chip);
+      WorstOB->SetBinContent(ilane+1,1+WorstOB->GetBinContent(ilane+1));
+    }
+  }
+  if (worstIBorbit > 0) {
+    for (uint chip : MAP[worstIBorbit]){
+      uint ilane = ChipToLane(chip);
+      WorstIB->SetBinContent(ilane+1,1+WorstIB->GetBinContent(ilane+1));
+    }
+  }
   WorstOB->SetTitle(Form("Worst OB, step %d = %d sec",worstOBstep,(int)((worstOBorbit-firstorbit)*89.e-6)));
   WorstOB->SetName(Form("Worst OB, step %d = %d sec",worstOBstep,(int)((worstOBorbit-firstorbit)*89.e-6)));
   WorstIB->SetTitle(Form("Worst IB, step %d = %d sec",worstIBstep,(int)((worstIBorbit-firstorbit)*89.e-6)));
@@ -553,7 +587,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
   
   TFile *outroot = nullptr;
-  if (WriteRootFile){
+  if (WriteAuxiliaryFile){
     outroot = new TFile(Form("%s/DeadMapQA.root",outdir.Data()),"RECREATE");
     grEffIB->Write();
     grEffOB->Write();
@@ -576,6 +610,20 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     grQB0->Write();
     grQB1->Write();
     grQB2->Write();
+    hStatusTimeIB->Write();
+    hStatusTimeML->Write();
+    hStatusTimeOL->Write();
+
+
+    QALOG<<"Writing full map to DeadMapQA_tMAP.json ...\n";
+    nlohmann::json j;
+    for (const auto& [key, vec] : MAP) {
+        j[std::to_string(key)] = vec;
+    }
+    std::ofstream jfile("DeadMapQA_tMAP.json");
+    jfile << j.dump(4);
+    jfile.close();
+    QALOG<<"...done\n";
   }
   
  
@@ -885,7 +933,7 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
   
   
 
-  if (WriteRootFile){
+  if (WriteAuxiliaryFile){
     outroot->Close();
   }
   
@@ -1079,30 +1127,65 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 	uint16_t lastlane = isLastOfLane(lastel);
 
 	int ndeadlanes[N_STAVES] = {0};
+
 	
 	if (firstlane == 9999 || lastlane == 9999){
-	  QALOG<<"FATAL decoding of chip intervals, returning emtpy vector\n";
-	  QAcheck["Chip interval"] = "FATAL";
-	  return elementlist;
-	}
-	else{
-	  for (uint16_t il = firstlane ; il <= lastlane; il++){
-	    if (opt == "lane"){
-	      elementlist.push_back(il);
-	    }
-	    else if (opt == "stave"){
-	      ndeadlanes[LaneToStave(il)]++;      
-	    } // end opt == stave
-	  } // end of loop over dead lanes
 
-	  if (opt == "stave"){
-	    for (uint16_t ist = 0; ist < N_STAVES; ist++){
-	      if (ndeadlanes[ist] == NLanesPerStave[StaveToLayer(ist)]){
-		elementlist.push_back(ist);
+	  for (uint16_t ee = firstel; ee <= lastel; ee++){
+	    cout<<"aaaaaaaaaaaaa "<<firstel<<" - "<<lastel<<endl;
+	    if (opt == "lane") singleDeadChips[ee]++;
+	  }
+
+	  if (!acceptSingleChips){
+	    //QALOG<<"ERROR - Single chips decoded in OB: from "<<firstel<<" to "<<lastel<<", but single chips are not accepted.\n";
+	    //QALOG<<"Neglectig chips out of the lane interval.\n";	    
+	    QAcheck["Chip interval"] = "ERROR";
+	    
+	    for (int ee = firstel; ee <= firstel+7; ee++){
+	      if (isFirstOfLane(ee) != 9999 && ee < lastel){
+		firstel = ee;
+		break;
 	      }
 	    }
-	  } // end of opt == stave
-	} // end of check of fatal format
+	    for (int ee = lastel; ee >= lastel-7; ee--){
+	      if (isLastOfLane(ee) != 9999 && ee > firstel){
+		lastel = ee;
+		break;
+	      }
+	    }
+	  }
+
+	  if (lastel - firstel + 1 < 7){ // dummy to skip the full interval
+	    firstel = 24121;
+	    lastel = 0;
+	  }
+	  
+	  else{
+	    QALOG<<"Single chips decoded in OB: from "<<firstel<<" to "<<lastel<<"\n";
+	    QAcheck["Chip interval"] = "MEDIUM";
+	  }  
+	}
+
+	  
+	if (opt == "lane"){
+	  for (uint16_t il = firstel ; il <= lastel; il++){
+	    elementlist.push_back(il);
+	  }
+	} // end opt == lane
+	else if (opt == "stave"){ // TO DO
+	  for (uint16_t il = firstlane ; il <= lastlane; il++){
+	    ndeadlanes[LaneToStave(il)]++;      
+	  } 
+	} // end opt == stave
+ 
+
+	if (opt == "stave"){
+	  for (uint16_t ist = 0; ist < N_STAVES; ist++){
+	    if (ndeadlanes[ist] == NLanesPerStave[StaveToLayer(ist)]){
+	      elementlist.push_back(ist);
+	    }
+	  }
+	} // end of opt == stave
       } // end opt == lane || opt == stave
     } // end loop word
   } // end map version
@@ -1121,6 +1204,32 @@ uint16_t ChipToLane(uint16_t chipid){
 
   if (chipid < N_LANES_IB) return chipid;
   else return N_LANES_IB + (uint16_t)(( chipid - N_LANES_IB) / 7);
+}
+
+uint16_t LaneToQCFEE(uint16_t laneid){
+
+  if (laneid < N_LANES_IB) return (uint16_t)(laneid/3);
+  else if (LaneToLayer(laneid) <= 4){
+    return N_LANES_IB/3 + (uint16_t)((laneid-N_LANES_IB)/8);
+  }
+  else{
+    return N_LANES_IB/3 + (uint16_t)(N_LANES_ML/8) +  (uint16_t)((laneid-N_LANES_IB-N_LANES_ML)/14);
+  }
+}
+
+uint16_t ChipToChipInLayer(uint16_t chipid){
+  /*
+  uint16_t c = 0;
+  for (int i=0; i<7; i++){
+    c += NChipsPerLayer[i];
+    if (chipid < c){
+      return chipid - (c-NChipsPerLayer[i]);
+    }
+  }
+  */
+  // should be the same:
+  int ChipBoundary[8] = { 0, 108, 252, 432, 3120, 6480, 14712, 24120 };
+  return chipid -  ChipBoundary[LaneToLayer(ChipToLane(chipid))];
 }
 
 
@@ -1224,7 +1333,7 @@ void fillmap(TString fname, int MapSampling){
   bool isFirstMapAllDead = false;
   
   if (MapSampling > 1){
-    QALOG<<"Map sampling set to one orbit evert "<<MapSampling<<"\n";
+    QALOG<<"Map sampling set to one orbit every "<<MapSampling<<"\n";
     size_t count = 0;
     auto itk = MAPKeys.begin();
     while (itk != MAPKeys.end()){
@@ -1243,8 +1352,13 @@ void fillmap(TString fname, int MapSampling){
      QALOG<<"No map sampling requested. Importing all the keys\n";
   } 
     
+  QALOG<<"Accept partially dead OB lanes? "<<acceptSingleChips<<"\n";
   
   for (int i=0; i<MAPKeys.size(); i++){
+
+    if (i%1000==0){
+      cout<<"step "<<i/1000<<"k"<<endl;
+    }
        
     unsigned long OO = MAPKeys[i];
     std::vector<uint16_t> MapAtOrbit;
@@ -1254,7 +1368,7 @@ void fillmap(TString fname, int MapSampling){
     StaveMAP[OO] = expandvector(MapAtOrbit,mapver,"stave");
     if (i==0){
       isFirstOrbitZero = (OO == 0);
-      isFirstMapAllDead = (MAP[OO].size() == N_LANES);
+      isFirstMapAllDead = (MAP[OO].size() == N_CHIPS);
     }
     else{
       isOtherOrbitZero = (OO == 0);
