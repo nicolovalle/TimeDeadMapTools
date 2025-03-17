@@ -22,6 +22,7 @@
 #include <TGraph.h>
 #include <TMath.h>
 
+#pragma cling add_include_path(".")
 #include "Logger.h"
 
 
