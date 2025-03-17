@@ -23,6 +23,7 @@
 #include <TMath.h>
 #include <nlohmann/json.hpp>
 
+#pragma cling add_include_path(".")
 #include "Logger.h"
 
 
