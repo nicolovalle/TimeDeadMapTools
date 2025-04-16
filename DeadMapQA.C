@@ -36,6 +36,7 @@ using namespace TMath;
 /// ________________________________________________________________________________________________________
 /// settings
 TString InputFile = "dmap.root";  // can be changed as argument of the macro
+bool IsSynthetic = false; // Use run number = -999 to set it true
 TString logfilename = "DeadMapQA.log";
 double SecForTrgRamp = 10;
 bool ExitWhenFinish = true;
@@ -59,8 +60,6 @@ const std::vector<std::vector<int>> Enabled{ // not in use yet
 
 
 // global variables handled by the functions
-int RUN_I;
-TString RUN_S;
 std::map<unsigned long, std::vector<uint16_t>> MAP;  // MAP[orbit] = vector of dead chip IDs 
 std::vector<unsigned long> MAPKeys;
 std::vector<int> MAPNwords;
@@ -171,14 +170,16 @@ void PrintAndExit(TString spec=""){
 //////////////// _ MAIN _ /////////////////////
 void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", bool WriteAuxiliaryFile = writeAuxiliaryFile, int MapSampling = mapSampling){
 
-  RUN_I = runnumber;
-  RUN_S = Form("%d",runnumber);
-
+  if (runnumber == -999) IsSynthetic = true;
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
   for (int i=0; i< N_CHIPS; i++) singleDeadChips[i]=0;
 
   QALOG<<"Checking file "<<FILENAME<<". Run "<<runnumber<<"\n";
+
+  if (IsSynthetic){
+	  QALOG<<"The run is treated as SYNTHETIC\n";
+  }
 
   TH2Poly *HMAP = new TH2Poly(); // evolving map
   TH2Poly *HSMAP = new TH2Poly(); // static part
@@ -446,8 +447,8 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     prev = it;
   } // end of loop map iterator
 
-  double recoIBperh = 3600.* nRecoIB / maprange;
-  double recoOBperh = 3600.* nRecoOB / maprange;
+  double recoIBperh = (NSteps > 1) ? 3600.* nRecoIB / maprange : -1.1111;
+  double recoOBperh = (NSteps > 1) ? 3600.* nRecoOB / maprange : -1.1111;
  
   maxgapsec = (double)(maxgap*LHCOrbitNS*1.e-9);
 
@@ -456,14 +457,20 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
 
   QAcheck["Orbit gaps"] = (maxgap > 1.*UnanchorableThreshold || ngap_overnominal > 0.25*NSteps ) ? "BAD" : (maxgap > 2.*NominalGap && ngap_overnominal > 2 ) ? "MEDIUM" : "GOOD"; 
 
-  double unAnchorableFrac = 1.*unAnchorable/ (currentorbit-firstorbit);
+  double unAnchorableFrac = (NSteps > 1) ? 1.*unAnchorable/ (currentorbit-firstorbit) : -1.111;
 
   QALOG<<"Un-anchorable number of orbits: "<<unAnchorable<<", corresponding to a fraction of the run of "<<unAnchorableFrac<<"\n";
 
   QAcheck["Un-anchorable fraction"] = (unAnchorableFrac < 0.02) ? "GOOD" : (unAnchorableFrac < 0.05) ? "MEDIUM" : "BAD";
-
+  
+  
   QALOG<<"Stave recoveries (IB/OB): "<<nRecoIB<<"/"<<nRecoOB<<"\n";
-  QALOG<<"Stave revoery rate (IB/OB) (1/h): "<<recoIBperh<<"/"<<recoOBperh<<"\n";
+  if (IsSynthetic && NSteps < 2){
+	  QALOG<<"Stave recovery rate (IB/OB) (1/h): n/a \n";
+  }
+  else{
+	  QALOG<<"Stave recovery rate (IB/OB) (1/h): "<<recoIBperh<<"/"<<recoOBperh<<"\n";
+  }
 
   QALOG<<"Worst cases computed skipping first "<<SecForTrgRamp<<" seconds.\n";
   QALOG<<"Worst OB case: orbit "<<worstOBorbit<<" step #"<<worstOBstep<<" dead lanes "<<worstOBcount<<"\n";
@@ -494,15 +501,20 @@ void DeadMapQA(TString FILENAME = InputFile, int runnumber = -1, TString outdir=
     cst[LaneToStave(i)] += 1;
     
   }
-  if (cib > 0 && maprange > SecForTrgRamp) dtimeIB /= cib; else dtimeIB = 1.1111;
-  if (cob > 0 && maprange > SecForTrgRamp) dtimeOB /= cob; else dtimeOB = 1.1111;
+  if (cib > 0 && ((maprange > SecForTrgRamp) || IsSynthetic)) dtimeIB /= cib; else dtimeIB = 1.1111;
+  if (cob > 0 && ((maprange > SecForTrgRamp) || IsSynthetic)) dtimeOB /= cob; else dtimeOB = 1.1111;
   for (int i=0; i<N_STAVES; i++){
     if (cst[i]>0) dtimeStave[i] /= cst[i]; else dtimeStave[i] = 1.1111;
   }
   
-
-  QALOG<<"Average IB dead time (no trg ramp): "<<dtimeIB<<"\n";
-  QALOG<<"Average OB dead time (no trg ramp): "<<dtimeOB<<"\n";
+  if (IsSynthetic && NSteps < 2){
+	  QALOG<<"Average IB dead time (no trg ramp): n/a \n";
+	  QALOG<<"Average OB dead time (no trg ramp): n/a \n";
+  }
+  else{
+	  QALOG<<"Average IB dead time (no trg ramp): "<<dtimeIB<<"\n";
+	  QALOG<<"Average OB dead time (no trg ramp): "<<dtimeOB<<"\n";
+  }
 
   QAcheck["Avg dead time IB"] = (dtimeIB < 0.03) ? "GOOD" : (dtimeIB < 0.10) ? "MEDIUM" : "BAD";
   QAcheck["Avg dead time OB"] = (dtimeOB < 0.05) ? "GOOD" : (dtimeOB < 0.10) ? "MEDIUM" : "BAD";
@@ -1133,7 +1145,7 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
 	if (firstlane == 9999 || lastlane == 9999){
 
 	  for (uint16_t ee = firstel; ee <= lastel; ee++){
-	    cout<<"aaaaaaaaaaaaa "<<firstel<<" - "<<lastel<<endl;
+	    //cout<<"aaaaaaaaaaaaa "<<firstel<<" - "<<lastel<<endl;
 	    if (opt == "lane") singleDeadChips[ee]++;
 	  }
 
@@ -1298,7 +1310,8 @@ void fillmap(TString fname, int MapSampling){
   QALOG<<"Static map imported\n";
   QALOG<<"Static map size = "<<StaticMap.size()<<"\n";
 
-  QAcheck["Map size"] = (obj->getEvolvingMapSize() > 0 && StaticMap.size() > 0) ? "GOOD" : "BAD";
+  int requiredNSteps = IsSynthetic ? 0 : 1;
+  QAcheck["Map size"] = (obj->getEvolvingMapSize() > requiredNSteps && StaticMap.size() > 0) ? "GOOD" : "BAD";
   if (obj->isDefault()){
     if (obj->getEvolvingMapSize() == 0 && StaticMap.size() == 0){
       QAcheck["Map size"] = "GOOD";
@@ -1309,9 +1322,9 @@ void fillmap(TString fname, int MapSampling){
     QAcheck["Default object"] = "FATAL";
     PrintAndExit("Exiting because default object");
   }
-  else if (obj->getEvolvingMapSize() == 0){
+  else if (obj->getEvolvingMapSize() <= requiredNSteps){
     QAcheck["Map size"] = "FATAL";
-    PrintAndExit("Exiting because evolving map is empty");
+    PrintAndExit("Exiting because evolving map has too few entries.");
   }
 
   SMAP = expandvector(StaticMap,mapver,"chip");
