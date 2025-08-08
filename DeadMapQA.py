@@ -268,9 +268,12 @@ def main(doGraphics = True):
 
     parallelize = True
 
+    exp_norb = len(raw_data['nwords'])
+    exp_eta = int(exp_norb/1000)
+
     if parallelize:
         import concurrent.futures
-        LOG(INFO,f'CPU count = {os.cpu_count()}')
+        LOG(INFO,f'CPU count = {os.cpu_count()}. Expected size {exp_norb}, {exp_eta} seconds to import it.')
         with concurrent.futures.ProcessPoolExecutor() as tor:
             futures = tor.map(process_vector, raw_data.items())
             for k, v1, v2, v3, n3, zeroOrb in futures:
