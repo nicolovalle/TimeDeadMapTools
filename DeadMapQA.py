@@ -1,0 +1,677 @@
+import json
+import numpy as np
+import traceback
+import time
+import os
+import sys
+
+import MakeCanvas
+from mylogger import *
+
+
+
+json_input = 'DeadMapJSON.json'
+log_file = 'QApy.log'
+traceback_file = 'exc.err'
+
+NominalGap = 380*32
+UnanchorableThreshold = 330000
+TriggerRampSec = 10
+zoom_threshold = 0.08
+
+N_CHIPS = 24120
+N_CHIPS_IB = 432
+N_CHIPS_OB = N_CHIPS - N_CHIPS_IB
+N_LANES = 3816
+N_LANES_IB = N_CHIPS_IB
+N_LANES_OB = N_LANES - N_LANES_IB
+N_LANES_ML = 864 # L3,4
+N_STAVES = 192
+N_STAVES_IB = 48
+vNStaves = [12, 16, 20, 24, 30, 42, 48]
+vLaneBound = [108, 252, 432, 816, 1296, 2472, 3816]
+vNLanesPerStave = [9, 9, 9, 16, 16, 28, 28]
+vNChipsPerLane = [1, 1, 1, 7, 7, 7, 7]
+chipsPerStave = np.array([9 if s < N_STAVES_IB else 112 if s < N_STAVES_IB+24+30 else 196 for s in range(N_STAVES)])
+
+
+LHCOrbitNS = 88924.6
+
+QAcheck = {}
+QAFLAG = 'UNKNOWN' # Updated when printing with the worst score
+GLO_RUN = 0
+
+NA = -111
+
+log_verbosity = 2 # 1: no DEBUG, 2: also DEBUG
+
+#_________________________________________________
+def LOG(severity, *message):
+    logger = Logger(log_file)
+    logger.set_highlight_keyword(True)
+    logger.set_verbosity(log_verbosity)
+    sp = f'[{GLO_RUN}]' if GLO_RUN > 0 else ''
+    logger.log(severity,sp,*message)
+def FLOG(severity, *message):
+    logger = Logger(log_file)
+    logger.set_print_on_terminal(False)
+    logger.set_verbosity(log_verbosity)
+    logger.log(severity,*message)
+    
+#________________________________________________
+def Traceback(severity, *message):
+    LOG(severity,*message)
+    LOG(severity,f'...full error stack in {traceback_file}')
+    logger = Logger(traceback_file)
+    logger.set_print_on_terminal(False)
+    logger.set_verbosity(9999)
+    logger.log(severity,*message)
+    with open(traceback_file,'a') as f:
+        f.write(traceback.format_exc())
+        f.write('\n'+'-'*50+'\n')
+        
+    
+    
+#_________________________________________________
+#def ChipToLane(chipid):
+#    if chipid < N_LANES_IB:
+#        return chipid
+#    else:
+#        return N_LANES_IB + (chipid - N_LANES_IB) // 7
+
+#_________________________________________________
+def Mapping(dummy='dummy',chip='na',lane='na'): # use either chip or lane
+
+    if dummy != 'dummy':
+        LOG(FATAL,'Invalid use. Exiting to avoid troubles')
+        exit()
+
+    if isinstance(chip,int):
+        if chip < N_LANES_IB:
+            lane = chip
+        else:
+            lane = N_LANES_IB + (chip - N_LANES_IB) // 7
+
+    layer = 0
+    laneinlayer = lane
+    for i in range(1,7):
+        if lane >= vLaneBound[i-1]:
+            layer = i
+            laneinlayer = lane - vLaneBound[i-1]
+
+    staveinlayer, laneinstave = divmod(laneinlayer, vNLanesPerStave[layer])
+    stave = 0
+    for l in range(7):
+        stave += int(l<layer)*vNStaves[l] + int(l==layer)*staveinlayer
+
+    #return lane, stave, staveinlayer, layer
+    return lane, stave, layer, staveinlayer, laneinstave
+    
+
+#_________________________________________________
+def NChipsPerLane(lane):
+    if isinstance(lane,np.ndarray):
+        return np.where(lane < N_CHIPS_IB, 1, 7)
+    else:
+        return 1 if lane < N_CHIPS_IB else 7
+            
+#________________________________________________
+def NDead(A,layers='all',element='chip'):
+    """
+    layers: IB, OB, all, layers (only with element = chip)
+    element : chip, lane (=fully dead lanes), lanewchip (=lane with at leas one dead chip)
+    """
+    if layers == 'layers' and element != 'chip':
+        LOG(FATAL,f'Invalid use of NDead. Exiting')
+        exit()
+        
+    if layers == 'IB':
+        l1,l2 = (0,N_LANES_IB)
+    elif layers == 'OB':
+        l1,l2 = (N_LANES_IB, N_LANES)
+    elif layers == 'all':
+        l1,l2 = (0,N_LANES)
+
+    if element == 'chip':
+        if layers == 'layers':
+            bb = [0,]+vLaneBound
+            return [A[bb[i]:bb[i+1]].sum() for i in range(7)]
+        else:
+            return np.sum(A[l1:l2])
+    elif element == 'lane':
+        return np.sum(A[l1:l2] == NChipsPerLane(np.arange(l1,l2))) 
+    elif element == 'lanewchip':
+        return np.sum(A[l1:l2] > 0)
+        
+#______________________________________________
+def TimeRollingAverage(x,y,window_size=300):
+    rolling_avg = np.convolve(np.array(y), np.ones(window_size)/window_size, mode='valid')
+    down_x = np.array(x)[window_size-1::window_size] # Taking every 300th point after the window size
+    down_y = rolling_avg[::window_size]  # Take the corresponding rolling averages
+    return down_x, down_y
+
+#______________________________________________
+def index_clusterizer(steps, full_keys, padding_sec=60):  # passing list interesting steps and full list of orbits. Returning list (a,b) where a and b are the first and last index of each cluster
+
+    if not steps:
+        LOG(INFO,f'Returning 0 clusters')
+        return []
+
+    padding_orb = int(padding_sec / (LHCOrbitNS * 1.e-9))
+    LOG(INFO,f"Looking for clusters of high dead fraction. Input: {len(steps)} indices. Merging up to {padding_orb} orbits.")
+
+    unique_steps = sorted(set(steps))
+    clusters_nopadding = []
+    current_cluster = [unique_steps[0],]
+
+    for s in unique_steps:
+        if full_keys[s] - full_keys[current_cluster[-1]] <= 2*padding_orb:
+            current_cluster.append(s)
+        else:
+            clusters_nopadding.append((current_cluster[0], current_cluster[-1]))
+            current_cluster = [s,]
+
+    clusters_nopadding.append((current_cluster[0], current_cluster[-1])) # adding last
+
+    clusters = []
+    
+    # extending each cluster up to padding
+    LOG(INFO,f"Extending intervals")
+    for A,B in clusters_nopadding:
+        a,b = (A,B)
+        while True:
+            a -= 1
+            if a < 1 or (full_keys[A] - full_keys[a]) > padding_orb:
+                a += 1
+                break
+        while True:
+            b += 1
+            if b >= len(full_keys)-1 or (full_keys[b] - full_keys[B]) > padding_orb:
+                b -= 1
+                break
+        clusters.append((a,b))
+
+    if len(clusters) > 9:
+        LOG(ERROR,f"Found {len(clusters)} > 9 clusters. This is not acceptable. Returning no clusters")
+        return []
+
+    LOG(INFO,f"Returning {len(clusters)} clusters")
+    return clusters
+        
+ 
+        
+#______________________________________________
+def LogQAchecks(checks):
+    global QAFLAG
+    score = {'GOOD': 1, 'UNKNOWN': 0, 'MEDIUM': -1, 'BAD': -2, 'FATAL': -3}
+    worst_score = 999
+    if 'Default object' in checks and checks['Default object'] == 'FATAL':
+        checks.pop('Map decoded',None)
+    for check, val in checks.items():
+        LOG(INFO,f'QA CHECK - {check}: {val}')
+        if score[val] < worst_score:
+            worst_score = score[val]
+            QAFLAG = val
+    
+#_______________________________________________
+def process_vector(kv): # function to parallelize over the orbits
+    k, vec = kv
+    #LOG(DEBUG,f'Orbit {k}')
+    if isinstance(k,int) or k.isdigit():
+        n_dead_l = np.zeros(N_LANES)
+        n_dead_s = np.zeros(N_STAVES)
+        chip_flg = np.zeros(N_CHIPS) # 1 if dead
+        for c in vec:
+            lan, sta, _, _, _ = Mapping(chip=c)
+            n_dead_l[lan] += 1
+            n_dead_s[sta] += 1
+            chip_flg[c] += 1
+        zeroOrbit = False
+        if int(k) == 0 and len(vec) == N_CHIPS:
+            zeroOrbit = True
+        return k, n_dead_l, n_dead_s, chip_flg, np.sum(chip_flg), zeroOrbit
+    else:
+        return None, None, None, None, None, None
+
+#________ MAIN ________________________________
+def main(doGraphics = True):
+
+    global QAFLAG
+    global QAcheck
+    global GLO_RUN
+    
+    LOG(INFO,f'Start. Importing data from {json_input}')
+
+    now_ = time.time()
+
+    with open(json_input) as f:
+        raw_data = json.load(f)
+
+    #chipmap = {int(k): v for k,v in raw_data.items()}
+
+    staticchipmap1 = list(raw_data['static'])
+    run = int(raw_data['run'])
+    LOG(INFO,f'Run number: {run}')
+    GLO_RUN = run
+    rctstart = int(raw_data['rctstart'])
+    rctstop = int(raw_data['rctstop'])
+    version = int(raw_data['version'])
+    isdefault = bool(raw_data['isdefault'])
+    fatalcheck = list(raw_data['fatal'])
+    lanemap = {}
+    stavemap = {}
+    ndeadchips = [] # ndeadchips[i] = total number of dead chips at step i --> to be implemented
+    critical_steps = [] # list of step indices where either OB or IB dead time is above zoom_threshold
+    counter_chip_by_chip = np.zeros(N_CHIPS)
+   
+    zeroOrbitFound = False
+
+    parallelize = True
+
+    if parallelize:
+        import concurrent.futures
+        LOG(INFO,f'CPU count = {os.cpu_count()}')
+        with concurrent.futures.ProcessPoolExecutor() as tor:
+            futures = tor.map(process_vector, raw_data.items())
+            for k, v1, v2, v3, n3, zeroOrb in futures:
+                if not zeroOrb and k is not None:
+                    lanemap[int(k)] = v1
+                    stavemap[int(k)] = v2
+                    counter_chip_by_chip = counter_chip_by_chip + v3
+                if zeroOrb and k is not None:
+                    zeroOrbitFound = True
+
+    else: # do not parallize
+        # MISSING IMPLEMENTATION OF ZERO ORBIT
+        for k, values in raw_data.items():
+            if isinstance(k,int) or k.isdigit():
+                n_dead_l = np.zeros(N_LANES)
+                n_dead_s = np.zeros(N_STAVES)
+                for c in values:
+                    lan, sta, _, _, _ = Mapping(chip=c)
+                    n_dead_l[lan] += 1
+                    n_dead_s[sta] += 1
+                    counter_chip_by_chip[c] += 1
+                lanemap[int(k)] = n_dead_l
+                stavemap[int(k)] = n_dead_s
+                
+        
+    lanemap = dict(sorted(lanemap.items()))
+            
+    keys = list(lanemap.keys())
+
+    staticchipmap2 = np.where(counter_chip_by_chip == len(keys))[0].tolist() # when OB single chips are saved, this should be equal to statichipmap
+
+    if staticchipmap1 == staticchipmap2:
+        LOG(INFO,f'Static maps 1 and 2 are identical')
+        staticchipmap = staticchipmap2
+    elif len(staticchipmap1) == 0 and len(staticchipmap2) > 0:
+        LOG(INFO,f'The static map is empty. Dead chips computed from evolving map')
+        staticchipmap = staticchipmap2
+    elif len(staticchipmap1) > 0 and len(staticchipmap2) == 0:
+        LOG(WARNING,f'There are no chips which are always dead in the evolving map!')
+        staticchipmap = staticchipmap1
+    else:
+        LOG(WARNING,f'Static maps 1 and 2 are both filled but different. Checking if all the dead chips in map 2 belong to a dead lane in the middle of the map.')
+        for cc in staticchipmap2:
+            lan, _, lay, _, _ = Mapping(chip=cc)
+            midkey = keys[len(keys) // 2]
+            if lanemap[midkey][lan] != vNChipsPerLane[lay]:
+                LOG(FATAL,f'Found event chip {cc} lane {lan} layer {lay}')
+                break
+        else:
+            LOG(INFO,f'Check passed')
+        staticchipmap = staticchipmap1
+        #exit()
+
+    for check in fatalcheck:
+        QAcheck[str(check)] = 'FATAL'
+    
+    if isdefault:
+        QAcheck['Default object'] = 'FATAL'
+
+    if len(keys) == 0:
+        if not any(ccc == 'FATAL' for ccc in QAcheck.values()):
+            QAcheck['Map size'] = 'FATAL'
+        LogQAchecks(QAcheck)
+        LOG(WARNING,f'No orbit keys found. Returning FATAL without further actions for this run {run}')
+        return 'FATAL' 
+
+    elapsed_time = time.time()-now_
+    with open('track_time.dat','a') as tt:
+        tt.write(f'{run} {len(keys)} {elapsed_time}\n')
+
+    staticlanemap = np.zeros(N_LANES)
+    for c in staticchipmap:
+        staticlanemap[Mapping(chip=c)[0]] += 1
+ 
+
+    minorbit = min(keys)
+    maxorbit = max(keys)
+
+    maprange = (maxorbit - minorbit) * LHCOrbitNS * 1.e-9
+    rctduration = (rctstop-rctstart) / 1000 if rctstart > 0 else -1
+
+    LOG(INFO,f'Run {run}')
+    LOG(INFO,f'Evolving map size: {len(keys)}')
+    LOG(INFO,f'Map range {minorbit} to {maxorbit}, in seconds: {maprange}')
+    LOG(INFO,f'Run duration from RCT object, in seconds: {rctduration}')
+
+
+    FullyDeadIB = int(NDead(staticlanemap, 'IB', 'chip'))
+    FullyDeadOB = int(NDead(staticlanemap, 'OB', 'chip'))
+    LanesWithFullyDeadOB = int(NDead(staticlanemap, 'IB', 'lanewchip'))
+
+    # --- loop over the orbits --------
+    gaps = []
+    ngap_overnominal = 0
+    unAnchorable = 0
+    TimeStampFromStart = []
+    DeadFractionIB = []
+    DeadFractionOB = []
+    
+    WorstIBN = -1
+    WorstIBStep = 0
+    WorstOBN = -1
+    WorstOBStep = 0
+
+    LaneDeadTime = np.zeros(N_LANES)
+    LaneDeadTimeNoRamp = np.zeros(N_LANES)
+    WorstIBLaneDeadFraction = np.zeros(N_LANES)
+    WorstOBLaneDeadFraction = np.zeros(N_LANES)
+    LastDeadFraction = np.zeros(N_LANES)
+
+    LanesWithSingleChip = set()
+
+    lane_range = np.arange(N_LANES)
+
+    nRecoIB = nRecoOB = 0
+
+    SecForTriggerRamp = -1
+    for i in range(len(keys)):
+
+        currentorbit = keys[i]
+        currentmap = lanemap[currentorbit] # np array with size N_LANES, of number of dead chips per lane
+
+        if i < len(keys)-1:
+            gaps.append(keys[i+1] - currentorbit)
+            if gaps[-1] > NominalGap:
+                ngap_overnominal += 1
+            if gaps[-1] > UnanchorableThreshold:
+                unAnchorable += (gaps[-1] - UnanchorableThreshold)
+
+        TimeStampFromStart.append( (currentorbit - minorbit) * LHCOrbitNS * 1.e-9)
+
+        if TimeStampFromStart[-1] > TriggerRampSec and SecForTriggerRamp < 0:
+            SecForTriggerRamp = TimeStampFromStart[-1]
+   
+        IBdead = NDead(currentmap,'IB','chip')
+        OBdead = NDead(currentmap,'OB','chip')
+        DeadFractionIB.append(IBdead / N_CHIPS_IB)
+        DeadFractionOB.append(OBdead / N_CHIPS_OB)
+
+        # PRINT TIMESTAMPS WITH HIGH DEAD TIME
+        #if IBdead/N_CHIPS_IB > 0.1:
+        #    LOG(DEBUG,f"DEBIB orb {currentorbit} sec {int((currentorbit - minorbit) * LHCOrbitNS * 1.e-9)} IB {IBdead/N_CHIPS_IB}")
+        #if OBdead/N_CHIPS_OB > 0.1:
+        #    LOG(DEBUG,f"DEBOB orb {currentorbit} sec {int((currentorbit - minorbit) * LHCOrbitNS * 1.e-9)} IB {OBdead/N_CHIPS_OB}")
+
+        # Build array of indices with large dead time (>=zoom_threshold)
+        if TimeStampFromStart[-1] >= SecForTriggerRamp:
+            if DeadFractionIB[-1] > zoom_threshold or DeadFractionOB[-1] > zoom_threshold:
+                critical_steps.append(i)
+                
+                
+        # Fill set of lanes with signle chips        
+        for lan,n in enumerate(currentmap[N_LANES_IB:], start=N_LANES_IB):
+            if 0 < n < NChipsPerLane(lan):
+                nsing = n - staticlanemap[lan]
+                if nsing > 0:
+                    LanesWithSingleChip.add(lan)
+                if nsing < 0:
+                    LOG(FATAL,'Unexpected number of dead chips in time-evolving vs static map')
+                    QAcheck['Other'] = 'FATAL'
+
+        if i < len(keys)-1:
+            ddtime = currentmap[lane_range]*(keys[i+1] - currentorbit)/NChipsPerLane(lane_range)
+            LaneDeadTime[lane_range] += ddtime # to be normalized by time
+            if TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp > 0:
+                LaneDeadTimeNoRamp[lane_range] += ddtime
+
+        if IBdead > WorstIBN and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0 and currentorbit != maxorbit:
+            WorstIBN = IBdead
+            WorstIBStep = i 
+        
+        if OBdead > WorstOBN and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0 and currentorbit != maxorbit:
+            WorstOBN = OBdead
+            WorstOBStep = i
+
+        if currentorbit == maxorbit:
+            LastDeadFraction = currentmap[lane_range] / NChipsPerLane(lane_range)
+
+        if i < len(keys)-1 and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
+            deadInStaveNext = stavemap[keys[i+1]]
+            isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave)
+            nRecoIB += np.sum(isRecoed[:N_STAVES_IB])
+            nRecoOB += np.sum(isRecoed[N_STAVES_IB:])
+            
+    # -- end loop over orbits
+
+    WorstIBLaneDeadFraction = lanemap[keys[WorstIBStep]][lane_range] / NChipsPerLane(lane_range)
+    WorstOBLaneDeadFraction = lanemap[keys[WorstOBStep]][lane_range] / NChipsPerLane(lane_range)
+
+    if len(keys) > 1:
+        LaneDeadTime /= (maxorbit-minorbit)
+        if TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
+            LaneDeadTimeNoRamp /= (maxorbit-minorbit-SecForTriggerRamp*1e9/LHCOrbitNS)
+        else:
+            LaneDeadTimeNoRamp[:] = NA
+        unAnchorableFrac = unAnchorable / (maxorbit - minorbit)
+        recoIBperH = nRecoIB / (maprange / 3600)
+        recoOBperH = nRecoOB / (maprange / 3600)
+    else:
+        LaneDeadTime[:] = NA
+        unAnchorableFrac = NA
+        LaneDeadTimeNoRamp[:] = NA
+        recoIBperH = NA
+        recoOBperH = NA
+
+   
+    AvgDeadTimeIB = np.mean(LaneDeadTimeNoRamp[:N_LANES_IB])
+    AvgDeadTimeOB = np.mean(LaneDeadTimeNoRamp[N_LANES_IB:])
+    
+    LOG(INFO,f'Lanes with single dead chips: {len(LanesWithSingleChip)}')
+    LOG(DEBUG,f'LWSC run {run} duration {rctduration:.1f} lanes {" ".join(str(x) for x in sorted(LanesWithSingleChip))}')
+    if len(LanesWithSingleChip) < 50:
+        lnames = ''
+        for l_ in sorted(LanesWithSingleChip):
+            _, _, la_, st_, ll_ = Mapping(lane=l_)
+            lnames += f'L{la_}_{st_}_{ll_} '
+        LOG(DEBUG,f'LNWSC {lnames}')
+    
+
+    DeadFrac_rolling_IB_x, DeadFrac_rolling_IB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionIB,window_size=300)
+    DeadFrac_rolling_OB_x, DeadFrac_rolling_OB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionOB,window_size=300)
+
+    CriticalStepsClusters = index_clusterizer(critical_steps, keys)
+    clusterizer_summary = ''
+    if len(critical_steps) > 0 and len(CriticalStepsClusters) > 0:
+        clusterizer_summary = f'{len(CriticalStepsClusters)} regions with > {100*zoom_threshold}% dead time'
+    if len(critical_steps) > 0 and len(CriticalStepsClusters) == 0:
+        clusterizer_summary = f'WARN: too many regions with > {100*zoom_threshold}% dead time?'
+       
+    # Performing the checks
+    
+    ## Avg dead time IB and OB
+    QAcheck['Avg dead time IB'] = 'GOOD' if AvgDeadTimeIB < 0.03 else 'MEDIUM' if AvgDeadTimeIB < 0.1 else 'BAD'
+    QAcheck['Avg dead time OB'] = 'GOOD' if AvgDeadTimeOB < 0.05 else 'MEDIUM' if AvgDeadTimeOB < 0.1 else 'BAD'
+
+    ## Single chips
+    singfrac = len(LanesWithSingleChip) / N_LANES_OB
+    QAcheck['Single chips'] = 'GOOD' if singfrac < 0.02 else 'MEDIUM' if singfrac < 0.05 else 'BAD'
+
+    ## Fully dead IB and OB
+    QAcheck['Fully dead IB'] = 'GOOD' if FullyDeadIB < 9 else 'MEDIUM' if FullyDeadIB < 0.1*N_CHIPS_IB else 'BAD'
+    QAcheck['Fully dead OB'] = 'GOOD' if LanesWithFullyDeadOB < 68 else 'BAD'
+
+    ## Deafault -> set at the beginning
+
+    ## Map size:
+    if isdefault:
+        QAcheck['Map size'] = 'GOOD' if len(keys)==0 and len(staticchipmap)==0 else 'FATAL'
+    else:
+        QAcheck['Map size'] = 'GOOD'
+        if len(staticchipmap) == 0:
+            QAcheck['Map size'] = 'BAD'
+        if len(keys) == 0:
+            QAcheck['Map size'] = 'FATAL'
+
+    ## Null orbit
+    if minorbit > 0 and not zeroOrbitFound:
+        QAcheck['Null orbit'] = 'GOOD'
+    #elif minorbit == 0 and NDead(lanemap[minorbit],'all','chip') == N_CHIPS:
+    elif minorbit > 0 and zeroOrbitFound: 
+        QAcheck['Null orbit'] = 'MEDIUM'
+    else:
+        QAcheck['Null orbit'] = 'BAD'
+
+    ## Orbit gaps
+    QAcheck['Orbit gaps'] = 'GOOD'
+    n_above = sum([g > NominalGap for g in gaps])
+    n_above2 = sum([g > 2*NominalGap for g in gaps])
+    if n_above2 > 0 or n_above > 2:
+        QAcheck['Orbit gaps'] = 'MEDIUM'
+    if unAnchorable > 0 or n_above > max(2, 0.25 * len(keys)):
+        QAcheck['Orbit gaps'] = 'BAD'
+
+    ## Orbit range
+    QAcheck['Orbit range'] = \
+        'MEDIUM' if maprange > rctduration + 5 else \
+        'GOOD' if maprange >= rctduration - 5 else \
+        'MEDIUM' if maprange >= rctduration - 30 else \
+        'BAD'
+
+    ## Unanchorable fraction
+    QAcheck['Un-anchorable fraction'] = 'GOOD' if unAnchorableFrac < 0.02 else 'MEDIUM' if unAnchorableFrac < 0.05 else 'BAD'
+    
+    LOG(INFO,f'Average IB dead time (no trg ramp): {AvgDeadTimeIB if AvgDeadTimeIB != NA else "n/a"}')
+    LOG(INFO,f'Average OB dead time (no trg ramp): {AvgDeadTimeOB if AvgDeadTimeOB != NA else "n/a" }')
+    LOG(INFO,f'Stave recoveries (IB/OB): {nRecoIB}/{nRecoOB}')
+    LOG(INFO,f'Stave recovery rate (IB/OB) (1/h): {recoIBperH if recoIBperH != NA else "n/a"}/{recoOBperH if recoOBperH != NA else "n/a"}')
+    LOG(INFO,f'Nominal gap is {NominalGap}. Number of steps above: {n_above}. Number of steps above 2xnominal: {n_above2}')
+    LOG(INFO,f'Unanchorable orbits: {unAnchorable} corresponding to {unAnchorableFrac} of the run duration')
+
+    
+    if not np.array_equal(DeadFrac_rolling_IB_x, DeadFrac_rolling_OB_x):
+        LOG(WARNING,f'The time steps of the rolling average for IB and OB differ')
+
+       
+    Text1 = f'k#INFO#w#empty#k#Orbit keys: {len(keys)}#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
+    Text1 += f'#w#empty#k#Dead chips (IB+OB): {FullyDeadIB} + {FullyDeadOB}'
+    Text1 += f'#k#OB lanes w/ single dead chips: {len(LanesWithSingleChip)}'
+    if zeroOrbitFound:
+        Text1 += f'#w#empty#r#First key orbit = 0 has been neglected'
+    if clusterizer_summary:
+        Text1 += f'#w#empty#k#{clusterizer_summary}'
+
+    Text2 = f'b#Run {run}#w#empty'
+    colorcode = {'GOOD': 'g', 'MEDIUM': 'orange', 'BAD': 'r', 'FATAL': 'm'}
+    for check, val in QAcheck.items():
+        try:
+            col = colorcode[val]
+        except:
+            col = 'k'
+        Text2 += f'#{col}#{check}: {val}'
+
+    # Logging the QA checks. This will also set the global quality returned by main()
+    LogQAchecks(QAcheck)
+
+    if doGraphics:
+        LOG(INFO,'Passing results to graphic functions')
+
+        try: 
+            MakeCanvas.make_canvas1(
+                lane_dead_time = LaneDeadTimeNoRamp.tolist(),
+                number_of_fully_dead = staticlanemap.tolist(),
+                gaps = gaps,
+                dead_fraction = [{'both':list(range(len(keys)))}, {'IB':DeadFractionIB, 'OB':DeadFractionOB}],
+                dead_fraction_rolling = [{'IB':(DeadFrac_rolling_IB_x/60).tolist(), 'OB':(DeadFrac_rolling_IB_x/60).tolist()}, {'IB':DeadFrac_rolling_IB_y.tolist(), 'OB':DeadFrac_rolling_OB_y.tolist()}],
+                words = [[],list(raw_data['nwords'])], # first is dummy for the number of dead chips step by step... to be implemented
+                WorstOBstep = WorstOBStep,
+                WorstIBstep = WorstIBStep,
+                worst_ob = WorstOBLaneDeadFraction.tolist(),
+                worst_ib = WorstIBLaneDeadFraction.tolist(),
+                #last = LastDeadFraction.tolist(),
+                last = [int(i in LanesWithSingleChip) for i in range(N_LANES)],
+                text1 = Text1,
+                text2 = Text2
+            )
+        except Exception as e:
+            Traceback(ERROR,f'Exception canvas 1: {e}')
+    
+        lanemap_fraction = {}
+        for k,vec in lanemap.items():
+            ff = np.zeros(N_LANES)
+            ff[lane_range] = vec[lane_range] / NChipsPerLane(lane_range)
+            lanemap_fraction[k] = ff
+            
+        try:
+            MakeCanvas.make_canvas2(
+                lanemap = lanemap_fraction,
+                idx = [[0,N_LANES_IB], [N_LANES_IB, N_LANES_IB+N_LANES_ML], [N_LANES_IB+N_LANES_ML,N_LANES]],
+                offset_sec = 0,
+                run=run
+                )
+        except Exception as e:
+            Traceback(ERROR,f'Exception canvas 2: {e}')
+    
+        try:
+            MakeCanvas.make_canvas4(
+                lane_dead_time = LaneDeadTimeNoRamp.tolist(),
+                run=run
+                )
+        except Exception as e:
+            Traceback(ERROR,f'Exception canvas 4: {e}')
+
+
+        # Making several canvas2
+        zoom_index = 0
+        for A,B in CriticalStepsClusters: # A,B are the first and last index of the zoom window
+            zoom_index += 1
+            
+            lanemap_fraction_zoom = {keys[i]: lanemap_fraction[keys[i]] for i in range(A,B+1)}
+            maxIB = 100*max(DeadFractionIB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
+            maxOB = 100*max(DeadFractionOB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
+
+            c2spec1 = f'zoom{zoom_index}: {maxIB:.1f}%/{maxOB:.1f}%'
+            c2spec2 = f'zoom{zoom_index}'
+            try:
+                MakeCanvas.make_canvas2(
+                    lanemap = lanemap_fraction_zoom,
+                    idx = [[0,N_LANES_IB], [N_LANES_IB, N_LANES_IB+N_LANES_ML], [N_LANES_IB+N_LANES_ML,N_LANES]],
+                    offset_sec = TimeStampFromStart[A],
+                    run = run,
+                    spec1= [c2spec1,]*3,
+                    spec2= c2spec2
+                    )
+            except Exception as e:
+                Traceback(ERROR,f'Exception canvas 2 {c2spec}: {e}')
+                        
+
+    LOG(INFO,f'Returning worst quality {QAFLAG}')
+    return QAFLAG
+
+###########  
+if __name__ == "__main__":
+
+    Usage = f"""
+       {sys.argv[0]} [no-graphics]
+    """
+
+    if '-h' in sys.argv or '--help' in sys.argv:
+        print(Usage)
+        exit()
+
+    nographics = 'no-graphics' in sys.argv
+    main(not nographics)
+    exit()
