@@ -492,9 +492,12 @@ def main(doGraphics = True):
             lnames += f'L{la_}_{st_}_{ll_} '
         LOG(DEBUG,f'LNWSC {lnames}')
     
+    wind_size = 300 if maprange < 12*60 else 600
 
-    DeadFrac_rolling_IB_x, DeadFrac_rolling_IB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionIB,window_size=300)
-    DeadFrac_rolling_OB_x, DeadFrac_rolling_OB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionOB,window_size=300)
+    LOG(INFO,f'Using {wind_size} sec as window for the rolling average')
+
+    DeadFrac_rolling_IB_x, DeadFrac_rolling_IB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionIB,window_size=wind_size)
+    DeadFrac_rolling_OB_x, DeadFrac_rolling_OB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionOB,window_size=wind_size)
 
     CriticalStepsClusters = index_clusterizer(critical_steps, keys)
     clusterizer_summary = ''
