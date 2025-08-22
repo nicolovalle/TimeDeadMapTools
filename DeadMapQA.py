@@ -492,7 +492,7 @@ def main(doGraphics = True):
             lnames += f'L{la_}_{st_}_{ll_} '
         LOG(DEBUG,f'LNWSC {lnames}')
     
-    wind_size = 300 if maprange < 12*60 else 600
+    wind_size = 600 if maprange > 10*60*60 else 300
 
     LOG(INFO,f'Using {wind_size} sec as window for the rolling average')
 
