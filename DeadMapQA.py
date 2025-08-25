@@ -626,6 +626,7 @@ def main(doGraphics = True):
                 lanemap = lanemap_fraction,
                 idx = [[0,N_LANES_IB], [N_LANES_IB, N_LANES_IB+N_LANES_ML], [N_LANES_IB+N_LANES_ML,N_LANES]],
                 offset_sec = 0,
+                spec1= [f' - run {run}',]*3, 
                 run=run
                 )
         except Exception as e:
@@ -648,8 +649,20 @@ def main(doGraphics = True):
             lanemap_fraction_zoom = {keys[i]: lanemap_fraction[keys[i]] for i in range(A,B+1)}
             maxIB = 100*max(DeadFractionIB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
             maxOB = 100*max(DeadFractionOB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
+            iat = [i for i in range(A,B+1) if max(DeadFractionIB[i], DeadFractionOB[i]) > zoom_threshold and TimeStampFromStart[i] > SecForTriggerRamp]
+            first_orb = keys[iat[0]]
+            last_orb = keys[iat[-1]]
+            first_sec = TimeStampFromStart[iat[0]]
+            last_sec = TimeStampFromStart[iat[-1]]
+            firstIB = 100*DeadFractionIB[iat[0]]
+            firstOB = 100*DeadFractionOB[iat[0]]
+            lastIB = 100*DeadFractionIB[iat[-1]]
+            lastOB = 100*DeadFractionOB[iat[-1]]
+            maxIB = 100*max(DeadFractionIB[i] for i in iat)
+            maxOB = 100*max(DeadFractionOB[i] for i in iat)           
 
-            c2spec1 = f'zoom{zoom_index}: {maxIB:.1f}%/{maxOB:.1f}%'
+            c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {first_orb} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {last_orb} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
+            LOG(INFO,f'Zoom details {c2spec0}')
             c2spec2 = f'zoom{zoom_index}'
             try:
                 MakeCanvas.make_canvas2(
@@ -657,7 +670,8 @@ def main(doGraphics = True):
                     idx = [[0,N_LANES_IB], [N_LANES_IB, N_LANES_IB+N_LANES_ML], [N_LANES_IB+N_LANES_ML,N_LANES]],
                     offset_sec = TimeStampFromStart[A],
                     run = run,
-                    spec1= [c2spec1,]*3,
+                    spec0 = c2spec0,
+                    spec1= [f' - run {run}',]*3, 
                     spec2= c2spec2
                     )
             except Exception as e:

@@ -270,6 +270,7 @@ def make_canvas2(
         idx = [[2,8], [10,20], [20,30]],
         offset_sec = 0, # this defines the first value on the x axis
         run = '?',
+        spec0 = '', # a string for the canvas header
         spec1 = ['','',''], # three strings to append to the plot titles
         spec2 = '' # a string to append to the file name
         ):
@@ -292,10 +293,8 @@ def make_canvas2(
     colors = ['#ffffff', '#5773e0', '#7b98ef', '#9FBEFF', '#C8D8F1', '#F3C6B3', '#E0664F', '#A70E2A']
     new_cmap = mcolors.ListedColormap(colors)
 
-    
-
-    plot_spec = [f'{run} ({js})' if js else run for js in spec1]
-    plot_titles = [f'Inner Barrel - run {plot_spec[0]}', f'Layer 3,4 - run {plot_spec[1]}', f'Layer 5,6 - run {plot_spec[2]}']
+ 
+    plot_titles = [f'Inner Barrel{spec1[0]}', f'Layer 3,4{spec1[1]}', f'Layer 5,6{spec1[2]}']
 
     def getlabel(b,l): # b is barrel, l is the lane in barrel
         NStaves = [ 12, 16, 20, 24, 30, 42, 48 ]
@@ -377,6 +376,9 @@ def make_canvas2(
     #cbar.set_label('z value')
     cbar.set_ticks(np.linspace(0, 1, len(colors)))
 
+    
+    fig.suptitle(f'Run {run}{spec0}', fontsize=13, y=0.985)
+
     # Save the figure
     name_spec = f'_{spec2}' if spec2 else ''
     outpath = os.path.join(output_dir, f'full_canvas2{name_spec}.png')
@@ -385,7 +387,7 @@ def make_canvas2(
     fig.subplots_adjust(
         left=0.04,
         right=0.98,
-        top=0.95,
+        top=0.925,
         bottom=0.035,
         wspace=0.1
     )
