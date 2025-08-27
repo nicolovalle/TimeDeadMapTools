@@ -572,7 +572,9 @@ def main(doGraphics = True):
         LOG(WARNING,f'The time steps of the rolling average for IB and OB differ')
 
        
-    Text1 = f'k#INFO#w#empty#k#Orbit keys: {len(keys)}#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
+    Text1 =  f'k#Orbit keys: {len(keys)}'
+    Text1 += '#k#' + ','.join(hex(o) for o in keys[:3]) + '...#k#...' + ','.join(hex(o) for o in keys[-3:])
+    Text1 += f'#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
     Text1 += f'#w#empty#k#Dead chips (IB+OB): {FullyDeadIB} + {FullyDeadOB}'
     Text1 += f'#k#OB lanes w/ single dead chips: {len(LanesWithSingleChip)}'
     if zeroOrbitFound:
@@ -645,26 +647,27 @@ def main(doGraphics = True):
         zoom_index = 0
         for A,B in CriticalStepsClusters: # A,B are the first and last index of the zoom window
             zoom_index += 1
-            
-            lanemap_fraction_zoom = {keys[i]: lanemap_fraction[keys[i]] for i in range(A,B+1)}
-            maxIB = 100*max(DeadFractionIB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
-            maxOB = 100*max(DeadFractionOB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
-            iat = [i for i in range(A,B+1) if max(DeadFractionIB[i], DeadFractionOB[i]) > zoom_threshold and TimeStampFromStart[i] > SecForTriggerRamp]
-            first_orb = keys[iat[0]]
-            last_orb = keys[iat[-1]]
-            first_sec = TimeStampFromStart[iat[0]]
-            last_sec = TimeStampFromStart[iat[-1]]
-            firstIB = 100*DeadFractionIB[iat[0]]
-            firstOB = 100*DeadFractionOB[iat[0]]
-            lastIB = 100*DeadFractionIB[iat[-1]]
-            lastOB = 100*DeadFractionOB[iat[-1]]
-            maxIB = 100*max(DeadFractionIB[i] for i in iat)
-            maxOB = 100*max(DeadFractionOB[i] for i in iat)           
 
-            c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {first_orb} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {last_orb} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
-            LOG(INFO,f'Zoom details {c2spec0}')
-            c2spec2 = f'zoom{zoom_index}'
             try:
+                lanemap_fraction_zoom = {keys[i]: lanemap_fraction[keys[i]] for i in range(A,B+1)}
+                maxIB = 100*max(DeadFractionIB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
+                maxOB = 100*max(DeadFractionOB[i] for i in range(A,B+1) if TimeStampFromStart[i] > SecForTriggerRamp)
+                iat = [i for i in range(A,B+1) if max(DeadFractionIB[i], DeadFractionOB[i]) > zoom_threshold and TimeStampFromStart[i] > SecForTriggerRamp]
+                first_orb = keys[iat[0]]
+                last_orb = keys[iat[-1]]
+                first_sec = TimeStampFromStart[iat[0]]
+                last_sec = TimeStampFromStart[iat[-1]]
+                firstIB = 100*DeadFractionIB[iat[0]]
+                firstOB = 100*DeadFractionOB[iat[0]]
+                lastIB = 100*DeadFractionIB[iat[-1]]
+                lastOB = 100*DeadFractionOB[iat[-1]]
+                maxIB = 100*max(DeadFractionIB[i] for i in iat)
+                maxOB = 100*max(DeadFractionOB[i] for i in iat)           
+
+                c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {first_orb} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {last_orb} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
+                LOG(INFO,f'Zoom details {c2spec0}')
+                c2spec2 = f'zoom{zoom_index}'
+            
                 MakeCanvas.make_canvas2(
                     lanemap = lanemap_fraction_zoom,
                     idx = [[0,N_LANES_IB], [N_LANES_IB, N_LANES_IB+N_LANES_ML], [N_LANES_IB+N_LANES_ML,N_LANES]],
@@ -675,8 +678,9 @@ def main(doGraphics = True):
                     spec2= c2spec2
                     )
             except Exception as e:
-                Traceback(ERROR,f'Exception canvas 2 {c2spec}: {e}')
-                        
+                Traceback(ERROR,f'Exception while creating zoom canvas n. {zoom_index}: {e}')
+
+                    
 
     LOG(INFO,f'Returning worst quality {QAFLAG}')
     return QAFLAG

@@ -149,7 +149,7 @@ def make_canvas1(
         colors = dec[::2]
         sentences = dec[1::2]
         for i in range(len(sentences)):
-            ax.text(0.05, 1-0.07*i, sentences[i], ha='left', va='center', fontsize=9, color=colors[i])
+            ax.text(0.05, 1-0.07*i, sentences[i], ha='left', va='center', fontsize=8, color=colors[i])
 
         if save_each:
             fig_text, ax_text = plt.subplots()
