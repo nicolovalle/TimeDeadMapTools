@@ -664,7 +664,7 @@ def main(doGraphics = True):
                 maxIB = 100*max(DeadFractionIB[i] for i in iat)
                 maxOB = 100*max(DeadFractionOB[i] for i in iat)           
 
-                c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {first_orb} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {last_orb} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
+                c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {hex(first_orb)} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {hex(last_orb)} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
                 LOG(INFO,f'Zoom details {c2spec0}')
                 c2spec2 = f'zoom{zoom_index}'
             
