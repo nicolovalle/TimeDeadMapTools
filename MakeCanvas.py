@@ -15,7 +15,8 @@ from mylogger import *
 log_file = 'QApy.log'
 LHCOrbitNS = 88924.6
 # === Canvas Configuration ===
-file_path = "1dview_coordinates.txt"
+view_file_path = "1dview_coordinates.txt"
+qc_view_file_path = "1dview_coordinates_qc.txt"
 output_dir = "canvas"
 save_each = False
 os.makedirs(output_dir, exist_ok=True)
@@ -29,7 +30,9 @@ def LOG(severity, *message):
 #########################################################
 def make_canvas1(
         lane_dead_time = [0.5,1]*(3816//2),
+        stave_dead_time = [0.5,1] * (192 // 2),
         number_of_fully_dead = [3,]*3816,
+        stave_recovery_rate = [0.5,1] * (192 // 2),
         text1 = 'k#First line#r#Second line#g#Third Line', # Format: 'color#Senetence
         text2 = 'b#Text2',
         gaps = [1,]*100000,
@@ -48,7 +51,8 @@ def make_canvas1(
 
     # === Load bins from file ===
     bins = []
-    with open(file_path) as f:
+    bins2 = []
+    with open(view_file_path) as f:
         for line in f:
             parts = list(map(float, line.strip().split()))
             if len(parts) != 9:
@@ -57,29 +61,42 @@ def make_canvas1(
             x = [x0, x1, x2, x3]
             y = [y0, y1, y2, y3]
             bins.append((x, y))
+    
+    with open(qc_view_file_path) as f:
+        for line in f:
+            parts = list(map(float, line.strip().split()))
+            if len(parts) != 7:
+                continue
+            _, x0, x1, x2, y0, y1, y2 = parts
+            x = [x0/10, x1/10, x2/10]  # saved as cm
+            y = [y0/10, y1/10, y2/10]  # saved as cm
+            bins2.append((x,y))
 
     
     # === Create canvas ===
-    fig, axes = plt.subplots(3, 4, figsize=(16, 10))
+    fig, axes = plt.subplots(4, 4, figsize=(20, 20))
     axes = axes.flatten()
     WorstIBtime = sum([gaps[i]*LHCOrbitNS*1.e-9 for i in range(WorstIBstep)])
     WorstOBtime = sum([gaps[i]*LHCOrbitNS*1.e-9 for i in range(WorstOBstep)])
     plot_title = ['Lane dead time after trg ramp','Number of dead chips in the lane', 'INFO', 'QUALITY',
                   'Orbit gaps','Gap distribution', 'Dead fraction', 'Dead fraction rolling avg',
-                  f'Number of words (tot: {sum(words[1])/1000:.1f}k)', f'Worst IB: step {WorstIBstep} = {WorstIBtime:.1f} s', f'Worst OB: step {WorstOBstep} = {WorstOBtime:.1f} s', 'Lanes with single dead chips']
+                  f'Number of words (tot: {sum(words[1])/1000:.1f}k)', f'Worst IB: step {WorstIBstep} = {WorstIBtime:.1f} s', f'Worst OB: step {WorstOBstep} = {WorstOBtime:.1f} s', 'Lanes with single dead chips',
+                  'Stave dead time','Recovery per hour']
 
     x_axis_title = ['','','','',
                     'step','seconds','step','time (min)',
-                    'words','','','']
+                    'words','','','',
+                    'x (cm) (IBx3)','x (cm) (IBx3)']
     y_axis_title = ['','','','',
                     'orbits','counts','','',
-                    'counts','','','']
+                    'counts','','','',
+                    'y (cm) (IBx3)','y (cm) (IBx3)']
     
     # === TH2Poly-like plots: indices [0, 1, 9, 10, 11] ===
     poly_indices = [0, 1, 9, 10, 11]
     for i, ax_idx in enumerate(poly_indices):
         ax = axes[ax_idx]
-        poly_data = bins#poly_sets[i]
+        poly_data = bins #poly_sets[i]
         patches_list = []
         values = []
 
@@ -139,7 +156,54 @@ def make_canvas1(
                 fig_single.colorbar(pc_single, ax=ax_single, shrink=0.8).set_label("Value")
             fig_single.savefig(f"{output_dir}/poly_plot_{ax_idx+1}.png")
             plt.close(fig_single)
-    
+
+    # === TH2Poly-like triangular style: indices [12, 13 ] ===
+    poly2_indices = [12, 13]
+    for i, ax_idx in enumerate(poly2_indices):
+        ax = axes[ax_idx]
+        poly2_data = bins2
+        patches_list = []
+        values = []
+
+        for x,y in poly2_data:
+            xy = np.column_stack([x,y])
+            polygon = plt.Polygon(xy, closed = True)
+            patches_list.append(polygon)
+
+        if ax_idx == 12:
+            values = stave_dead_time
+        if ax_idx == 13:
+            values = stave_recovery_rate
+
+        vmin = min(values)
+        vmax = max(values)
+
+        if 'Stave dead time' in plot_title[ax_idx] and vmin < vmax: # and vmin > 0:
+            norm = LogNorm(vmin=vmin if vmin > 0 else 1.e-5, vmax=vmax)
+        elif 'Recover' in plot_title[ax_idx] and vmin < vmax: # and vmin > 0:
+            norm = LogNorm(vmin=vmin if vmin > 0 else 1.e-2, vmax=vmax)
+        else:
+            norm = Normalize(vmin=vmin, vmax=vmax)
+
+        cmap = 'coolwarm'
+        if vmin == vmax:
+            cmap += '_r'
+        pc = PatchCollection(patches_list, cmap=cmap, edgecolor='k', linewidth=0.1, norm=norm)
+        pc.set_array(np.array(values))
+        ax.add_collection(pc)
+        ax.autoscale_view()
+        if np.min(np.array(values)) == np.max(np.array(values)):
+            pc.set_clim(np.min(np.array(values)),np.min(np.array(values)))
+        
+        ax.set_aspect('equal')
+        #ax.set_xticks([])
+        #ax.set_yticks([])
+        ax.set_title(plot_title[ax_idx])
+        ax.set_xlabel(x_axis_title[ax_idx])
+        ax.set_ylabel(y_axis_title[ax_idx])
+        fig.colorbar(pc, ax=ax, shrink=0.8)
+
+        
     # === Text Info: indices [2, 3] ===
     texts = [text1, text2]
     for idx, text in zip([2, 3], texts):

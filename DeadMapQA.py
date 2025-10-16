@@ -259,7 +259,7 @@ def main(doGraphics = True):
     isdefault = bool(raw_data['isdefault'])
     fatalcheck = list(raw_data['fatal'])
     lanemap = {}
-    stavemap = {}
+    stavemap = {} # stavemap[orbit] = number of chips dead in the stave at that step
     ndeadchips = [] # ndeadchips[i] = total number of dead chips at step i --> to be implemented
     critical_steps = [] # list of step indices where either OB or IB dead time is above zoom_threshold
     counter_chip_by_chip = np.zeros(N_CHIPS)
@@ -380,6 +380,8 @@ def main(doGraphics = True):
 
     LaneDeadTime = np.zeros(N_LANES)
     LaneDeadTimeNoRamp = np.zeros(N_LANES)
+    StaveDeadTimeNoRamp = np.zeros(N_STAVES)
+    StaveRecoveryPerHour = np.zeros(N_STAVES)
     WorstIBLaneDeadFraction = np.zeros(N_LANES)
     WorstOBLaneDeadFraction = np.zeros(N_LANES)
     LastDeadFraction = np.zeros(N_LANES)
@@ -454,7 +456,8 @@ def main(doGraphics = True):
 
         if i < len(keys)-1 and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
             deadInStaveNext = stavemap[keys[i+1]]
-            isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave)
+            isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave) 
+            StaveRecoveryPerHour += isRecoed  # to be normalized by number of hours
             nRecoIB += np.sum(isRecoed[:N_STAVES_IB])
             nRecoOB += np.sum(isRecoed[N_STAVES_IB:])
             
@@ -472,12 +475,17 @@ def main(doGraphics = True):
         unAnchorableFrac = unAnchorable / (maxorbit - minorbit)
         recoIBperH = nRecoIB / (maprange / 3600)
         recoOBperH = nRecoOB / (maprange / 3600)
+        StaveRecoveryPerHour /= (maprange / 3600)
     else:
         LaneDeadTime[:] = NA
         unAnchorableFrac = NA
         LaneDeadTimeNoRamp[:] = NA
         recoIBperH = NA
         recoOBperH = NA
+        StaveRecovertPerHour[:] = NA
+
+    lane_to_stave = np.array([Mapping(lane=l)[1] for l in range(N_LANES)])
+    StaveDeadTimeNoRamp = np.bincount(lane_to_stave, weights=LaneDeadTimeNoRamp) / np.bincount(lane_to_stave)
 
    
     AvgDeadTimeIB = np.mean(LaneDeadTimeNoRamp[:N_LANES_IB])
@@ -600,7 +608,9 @@ def main(doGraphics = True):
         try: 
             MakeCanvas.make_canvas1(
                 lane_dead_time = LaneDeadTimeNoRamp.tolist(),
+                stave_dead_time = StaveDeadTimeNoRamp.tolist(),
                 number_of_fully_dead = staticlanemap.tolist(),
+                stave_recovery_rate = StaveRecoveryPerHour.tolist(),
                 gaps = gaps,
                 dead_fraction = [{'both':list(range(len(keys)))}, {'IB':DeadFractionIB, 'OB':DeadFractionOB}],
                 dead_fraction_rolling = [{'IB':(DeadFrac_rolling_IB_x/60).tolist(), 'OB':(DeadFrac_rolling_IB_x/60).tolist()}, {'IB':DeadFrac_rolling_IB_y.tolist(), 'OB':DeadFrac_rolling_OB_y.tolist()}],
@@ -698,4 +708,6 @@ if __name__ == "__main__":
 
     nographics = 'no-graphics' in sys.argv
     main(not nographics)
+    with open("QAHANDSHAKE", "w") as f:
+        f.write("ok")
     exit()
