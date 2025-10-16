@@ -75,6 +75,7 @@ def make_canvas1(
     
     # === Create canvas ===
     fig, axes = plt.subplots(4, 4, figsize=(20, 20))
+    unused = list(range(len(fig.axes))) # updated along the loop over axes
     axes = axes.flatten()
     WorstIBtime = sum([gaps[i]*LHCOrbitNS*1.e-9 for i in range(WorstIBstep)])
     WorstOBtime = sum([gaps[i]*LHCOrbitNS*1.e-9 for i in range(WorstOBstep)])
@@ -95,6 +96,7 @@ def make_canvas1(
     # === TH2Poly-like plots: indices [0, 1, 9, 10, 11] ===
     poly_indices = [0, 1, 9, 10, 11]
     for i, ax_idx in enumerate(poly_indices):
+        unused.remove(ax_idx)
         ax = axes[ax_idx]
         poly_data = bins #poly_sets[i]
         patches_list = []
@@ -160,6 +162,7 @@ def make_canvas1(
     # === TH2Poly-like triangular style: indices [12, 13 ] ===
     poly2_indices = [12, 13]
     for i, ax_idx in enumerate(poly2_indices):
+        unused.remove(ax_idx)
         ax = axes[ax_idx]
         poly2_data = bins2
         patches_list = []
@@ -207,13 +210,14 @@ def make_canvas1(
     # === Text Info: indices [2, 3] ===
     texts = [text1, text2]
     for idx, text in zip([2, 3], texts):
+        unused.remove(idx)
         ax = axes[idx]
         ax.axis('off')
         dec = text.split('#')
         colors = dec[::2]
         sentences = dec[1::2]
         for i in range(len(sentences)):
-            ax.text(0.05, 1-0.07*i, sentences[i], ha='left', va='center', fontsize=8, color=colors[i])
+            ax.text(0.05, 1-0.06-0.055*i, sentences[i], ha='left', va='center', fontsize=11, color=colors[i])
 
         if save_each:
             fig_text, ax_text = plt.subplots()
@@ -226,6 +230,7 @@ def make_canvas1(
     # === Multigraphs at indices [4, 6, 7] ===
     multi_indices = [4, 6, 7]
     for idx in multi_indices:
+        unused.remove(idx)
         ax = axes[idx]
         if idx == 4:
             x_ = list(range(len(gaps)))
@@ -284,6 +289,7 @@ def make_canvas1(
     # === 1D histograms ===
     hist_indices = [5,8]
     for i in hist_indices:
+        unused.remove(i)
         ax = axes[i]
         if i == 5:
             data = np.array(gaps) * (LHCOrbitNS * 1.e-9)
@@ -308,6 +314,7 @@ def make_canvas1(
     # === Scatter plot ====
     #hist_indices = [8,]
     #for i in hist_indices:
+    #    unused.remove(i)
     #    ax = axes[i]
     #    if i == 8:
     #       datax = words[0] # chips
@@ -318,7 +325,11 @@ def make_canvas1(
     #   ax.set_ylabel(y_axis_title[i])
     #   ax.set_yscale('log')
     #   ax.set_xscale('log')
-        
+
+
+    # remove empty pads
+    for idx in unused:
+        fig.delaxes(axes[idx])
     
     # === Save full canvas ===
     outpath = os.path.join(output_dir, 'full_canvas1.png')
