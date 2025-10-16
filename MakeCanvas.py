@@ -122,7 +122,7 @@ def make_canvas1(
         vmin = min(values)
         vmax = max(values)
         if 'Lane dead time' in plot_title[ax_idx] and vmin < vmax: # and vmin > 0:
-            norm = LogNorm(vmin=vmin if vmin > 0 else 1.e-5, vmax=vmax)
+            norm = LogNorm(vmin=1.e-5, vmax=1)
         else:    
             norm = Normalize(vmin=vmin, vmax=vmax)
 
@@ -179,12 +179,17 @@ def make_canvas1(
             values = stave_recovery_rate
 
         vmin = min(values)
+        try:
+            vminpositive = min([i for i in values if i > 0])
+        except:
+            vminpositive = 0
         vmax = max(values)
 
         if 'Stave dead time' in plot_title[ax_idx] and vmin < vmax: # and vmin > 0:
-            norm = LogNorm(vmin=vmin if vmin > 0 else 1.e-5, vmax=vmax)
+            norm = LogNorm(vmin=1.e-5, vmax=1)
         elif 'Recover' in plot_title[ax_idx] and vmin < vmax: # and vmin > 0:
-            norm = LogNorm(vmin=vmin if vmin > 0 else 1.e-2, vmax=vmax)
+            
+            norm = LogNorm(vmin=0.8*vminpositive if vminpositive > 0 else 1.e-2, vmax=vmax)
         else:
             norm = Normalize(vmin=vmin, vmax=vmax)
 
