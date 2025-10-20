@@ -700,12 +700,20 @@ if __name__ == "__main__":
 
     Usage = f"""
        {sys.argv[0]} [no-graphics]
+       or
+       {sys.argv[0]} input.json [no-graphics]
+       default input is {json_input}
     """
 
     if '-h' in sys.argv or '--help' in sys.argv:
         print(Usage)
         exit()
 
+    if len(sys.argv) > 1:
+        if '.json' in sys.argv[1]:
+            json_input = str(sys.argv[1])
+
+    LOG(INFO,f'Running QA on file {json_input}')
     nographics = 'no-graphics' in sys.argv
     main(not nographics)
     with open("QAHANDSHAKE", "w") as f:
