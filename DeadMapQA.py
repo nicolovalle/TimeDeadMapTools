@@ -29,9 +29,11 @@ N_LANES_ML = 864 # L3,4
 N_STAVES = 192
 N_STAVES_IB = 48
 vNStaves = [12, 16, 20, 24, 30, 42, 48]
-vLaneBound = [108, 252, 432, 816, 1296, 2472, 3816]
+vStaveBound = [0, 12, 28, 48, 72, 102, 144, 192]
+vLaneBound = [0, 108, 252, 432, 816, 1296, 2472, 3816]
 vNLanesPerStave = [9, 9, 9, 16, 16, 28, 28]
 vNChipsPerLane = [1, 1, 1, 7, 7, 7, 7]
+
 chipsPerStave = np.array([9 if s < N_STAVES_IB else 112 if s < N_STAVES_IB+24+30 else 196 for s in range(N_STAVES)])
 
 
@@ -95,9 +97,9 @@ def Mapping(dummy='dummy',chip='na',lane='na'): # use either chip or lane
     layer = 0
     laneinlayer = lane
     for i in range(1,7):
-        if lane >= vLaneBound[i-1]:
+        if lane >= vLaneBound[i]:
             layer = i
-            laneinlayer = lane - vLaneBound[i-1]
+            laneinlayer = lane - vLaneBound[i]
 
     staveinlayer, laneinstave = divmod(laneinlayer, vNLanesPerStave[layer])
     stave = 0
@@ -134,8 +136,7 @@ def NDead(A,layers='all',element='chip'):
 
     if element == 'chip':
         if layers == 'layers':
-            bb = [0,]+vLaneBound
-            return [A[bb[i]:bb[i+1]].sum() for i in range(7)]
+            return [A[vLaneBound[i]:vLaneBound[i+1]].sum() for i in range(7)]
         else:
             return np.sum(A[l1:l2])
     elif element == 'lane':
@@ -372,6 +373,9 @@ def main(doGraphics = True):
     TimeStampFromStart = []
     DeadFractionIB = []
     DeadFractionOB = []
+    DeadFractionLay = [[] for _ in range(7)]
+    RecoveryRateLay = [[] for _ in range(7)]
+  
     
     WorstIBN = -1
     WorstIBStep = 0
@@ -395,6 +399,9 @@ def main(doGraphics = True):
     SecForTriggerRamp = -1
     for i in range(len(keys)):
 
+        if i % (len(keys) // 4) == 0:
+            LOG(INFO,f'{i} / {len(keys)}...')
+
         currentorbit = keys[i]
         currentmap = lanemap[currentorbit] # np array with size N_LANES, of number of dead chips per lane
 
@@ -406,20 +413,22 @@ def main(doGraphics = True):
                 unAnchorable += (gaps[-1] - UnanchorableThreshold)
 
         TimeStampFromStart.append( (currentorbit - minorbit) * LHCOrbitNS * 1.e-9)
+        deltaTsec = 0 if i >= len(keys)-1 else (keys[i+1] - currentorbit) * LHCOrbitNS * 1.e-9
 
         if TimeStampFromStart[-1] > TriggerRampSec and SecForTriggerRamp < 0:
             SecForTriggerRamp = TimeStampFromStart[-1]
-   
+
+        # Fraction of dead chips per Barrel
         IBdead = NDead(currentmap,'IB','chip')
         OBdead = NDead(currentmap,'OB','chip')
         DeadFractionIB.append(IBdead / N_CHIPS_IB)
         DeadFractionOB.append(OBdead / N_CHIPS_OB)
 
-        # PRINT TIMESTAMPS WITH HIGH DEAD TIME
-        #if IBdead/N_CHIPS_IB > 0.1:
-        #    LOG(DEBUG,f"DEBIB orb {currentorbit} sec {int((currentorbit - minorbit) * LHCOrbitNS * 1.e-9)} IB {IBdead/N_CHIPS_IB}")
-        #if OBdead/N_CHIPS_OB > 0.1:
-        #    LOG(DEBUG,f"DEBOB orb {currentorbit} sec {int((currentorbit - minorbit) * LHCOrbitNS * 1.e-9)} IB {OBdead/N_CHIPS_OB}")
+        # Fraction of dead chip
+        LayDead = NDead(currentmap,'layers','chip') #LayDead[4] = number of dead chips in L4
+        for ilay in range(7):
+            DeadFractionLay[ilay].append(LayDead[ilay] / vNStaves[ilay] / chipsPerStave[ilay])
+        
 
         # Build array of indices with large dead time (>=zoom_threshold)
         if TimeStampFromStart[-1] >= SecForTriggerRamp:
@@ -455,11 +464,15 @@ def main(doGraphics = True):
             LastDeadFraction = currentmap[lane_range] / NChipsPerLane(lane_range)
 
         if i < len(keys)-1 and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
-            deadInStaveNext = stavemap[keys[i+1]]
-            isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave) 
+            isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave)
             StaveRecoveryPerHour += isRecoed  # to be normalized by number of hours
             nRecoIB += np.sum(isRecoed[:N_STAVES_IB])
             nRecoOB += np.sum(isRecoed[N_STAVES_IB:])
+            for ilay in range(7):
+                RecoveryRateLay[ilay].append(np.sum(isRecoed[vStaveBound[ilay]:vStaveBound[ilay+1]]) / deltaTsec)
+        else:
+            for ilay in range(7):
+                RecoveryRateLay[ilay].append(0)  
             
     # -- end loop over orbits
 
@@ -506,7 +519,7 @@ def main(doGraphics = True):
 
     DeadFrac_rolling_IB_x, DeadFrac_rolling_IB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionIB,window_size=wind_size)
     DeadFrac_rolling_OB_x, DeadFrac_rolling_OB_y = TimeRollingAverage(TimeStampFromStart,DeadFractionOB,window_size=wind_size)
-
+    
     CriticalStepsClusters = index_clusterizer(critical_steps, keys)
     clusterizer_summary = ''
     if len(critical_steps) > 0 and len(CriticalStepsClusters) > 0:
@@ -605,7 +618,7 @@ def main(doGraphics = True):
     if doGraphics:
         LOG(INFO,'Passing results to graphic functions')
 
-        try: 
+        try:
             MakeCanvas.make_canvas1(
                 lane_dead_time = LaneDeadTimeNoRamp.tolist(),
                 stave_dead_time = StaveDeadTimeNoRamp.tolist(),
@@ -652,6 +665,27 @@ def main(doGraphics = True):
         except Exception as e:
             Traceback(ERROR,f'Exception canvas 4: {e}')
 
+        try:
+            MakeCanvas.make_canvas5(
+                dead0 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[0],window_size=wind_size)),
+                dead1 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[1],window_size=wind_size)),
+                dead2 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[2],window_size=wind_size)),
+                dead3 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[3],window_size=wind_size)),
+                dead4 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[4],window_size=wind_size)),
+                dead5 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[5],window_size=wind_size)),
+                dead6 = list(TimeRollingAverage(TimeStampFromStart,DeadFractionLay[6],window_size=wind_size)),
+                reco0 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[0],window_size=wind_size)),
+                reco1 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[1],window_size=wind_size)),
+                reco2 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[2],window_size=wind_size)),
+                reco3 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[3],window_size=wind_size)),
+                reco4 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[4],window_size=wind_size)),
+                reco5 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[5],window_size=wind_size)),
+                reco6 = list(TimeRollingAverage(TimeStampFromStart,RecoveryRateLay[6],window_size=wind_size)),
+                run = str(GLO_RUN)
+                )
+        except Exception as e:
+            Traceback(ERROR,f'Exception canvas 5: {e}')
+               
 
         # Making several canvas2
         zoom_index = 0

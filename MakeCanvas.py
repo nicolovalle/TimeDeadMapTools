@@ -355,6 +355,7 @@ def make_canvas2(
         spec2 = '' # a string to append to the file name
         ):
 
+
     LOG(INFO,f'Creating canvas 2 {spec2}')
     # Extract the keys and arrays from the lanemap
     keys = list(lanemap.keys())  # x-axis values (keys of the lanemap dictionary)
@@ -472,6 +473,7 @@ def make_canvas2(
         wspace=0.1
     )
     fig.savefig(outpath, dpi=500)
+    #fig.show()
 
     # Close the figure to release resources
     plt.close(fig)
@@ -536,13 +538,18 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
                  reco3 = [[],[]],
                  reco4 = [[],[]],
                  reco5 = [[],[]],
-                 reco6 = [[],[]]
+                 reco6 = [[],[]],
+                 window_size_reco = 1,
+                 run = '?'
                  ):
-    
-     fig, axes = plt.subplots(2,2,figsize=(8,6))
+
+
+     LOG(INFO,f'Creating canvas 5')
+     
+     fig, axes = plt.subplots(3,2,figsize=(8,9))
      
      axes = axes.flatten()
-     plot_title = ['Dead time IB','Dead time OB','Recovery rate IB','Recovery rate OB']
+     plot_title = [f'Dead fraction IB - run {run}',f'Dead fraction OB - run {run}',f'Approx reco/hour, IB - run {run}',f'Approx reco/hour, OB - run {run}',f'IB', f'OB']
     
 
      markersize = 3
@@ -552,7 +559,7 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      idx = 0
      ax = axes[idx]
      
-     X=[np.array(dead0[0]), np.array(dead1[0]), np.array(dead2[0])]
+     X=[np.array(dead0[0])/60, np.array(dead1[0])/60, np.array(dead2[0])/60]
      Y=[np.array(dead0[1]), np.array(dead1[1]), np.array(dead2[1])]
      
     
@@ -560,7 +567,9 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          try:             
              ax.plot(X[i],Y[i], label=f'L{i}', marker = markers[i], markersize=markersize)
              ax.set_title(plot_title[idx])
+             ax.set_yscale('log')
              ax.legend()
+             ax.set_xlabel('min')
          except Exception as e:
              
              LOG(WARNING,f'Exception while creating {plot_title[idx]}, L{i}: {e}')
@@ -569,24 +578,26 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      # Dead time OB
      idx = 1
      ax = axes[idx]
-     X=[np.array(dead2[0]), np.array(dead4[0]), np.array(dead5[0]), np.array(dead6[0])]
-     Y=[np.array(dead2[1]), np.array(dead4[1]), np.array(dead5[1]), np.array(dead6[1])]
+     X=[np.array(dead3[0])/60, np.array(dead4[0])/60, np.array(dead5[0])/60, np.array(dead6[0])/60]
+     Y=[np.array(dead3[1]), np.array(dead4[1]), np.array(dead5[1]), np.array(dead6[1])]
     
      for i,l in enumerate([3,4,5,6]):
          try:
              ax.plot(X[i],Y[i], label=f'L{l}', marker = markers[i], markersize=markersize)
              ax.set_title(plot_title[idx])
              ax.legend()
+             ax.set_yscale('log')
+             ax.set_xlabel('min')
          except Exception as e:
              LOG(WARNING,f'Exception while creating {plot_title[idx]}, L{l}: {e}')
 
 
-    # Reco rate IB
+     # Reco rate IB
      idx = 2
      ax = axes[idx]
      
-     X=[np.array(reco0[0]), np.array(reco1[0]), np.array(reco2[0])]
-     Y=[np.array(reco0[1]), np.array(reco1[1]), np.array(reco2[1])]
+     X=[np.array(reco0[0])/60, np.array(reco1[0])/60, np.array(reco2[0])/60]
+     Y=[np.array(reco0[1])*3600, np.array(reco1[1])*3600, np.array(reco2[1])*3600]
      
     
      for i in range(3):         
@@ -594,6 +605,7 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
              ax.plot(X[i],Y[i], label=f'L{i}', marker = markers[i], markersize=markersize)
              ax.set_title(plot_title[idx])
              ax.legend()
+             ax.set_yscale('log')
          except Exception as e:            
              LOG(WARNING,f'Exception while creating {plot_title[idx]}, L{i}: {e}')
    
@@ -601,16 +613,56 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      # Reco rate OB
      idx = 3
      ax = axes[idx]
-     X=[np.array(reco2[0]), np.array(reco4[0]), np.array(reco5[0]), np.array(reco6[0])]
-     Y=[np.array(reco2[1]), np.array(reco4[1]), np.array(reco5[1]), np.array(reco6[1])]
+     X=[np.array(reco3[0])/60, np.array(reco4[0])/60, np.array(reco5[0])/60, np.array(reco6[0])/60]
+     Y=[np.array(reco3[1])*3600, np.array(reco4[1])*3600, np.array(reco5[1])*3600, np.array(reco6[1])*3600]
+     
     
      for i,l in enumerate([3,4,5,6]):
          try:
              ax.plot(X[i],Y[i], label=f'L{l}', marker = markers[i], markersize=markersize)
              ax.set_title(plot_title[idx])
              ax.legend()
+             ax.set_yscale('log')
          except Exception as e:
              LOG(WARNING,f'Exception while creating {plot_title[idx]}, L{l}: {e}')
+
+     # Scatter IB
+     idx = 4
+     ax = axes[idx]
+     try:
+         ax.scatter(dead0[1], [3600*r for r in reco0[1]], color='blue', marker=markers[0], s=12, label='L0', alpha=0.7)
+         ax.scatter(dead1[1], [3600*r for r in reco1[1]], color='orange', marker=markers[1], s=12, label='L1', alpha=0.7)
+         ax.scatter(dead2[1], [3600*r for r in reco2[1]], color='green', marker=markers[2], s=12, label='L2', alpha=0.7)
+         
+         ax.set_xlabel("dead fraction")
+         ax.set_ylabel("recovery rate")
+         ax.set_title(plot_title[idx])
+         ax.set_xscale('log')
+         ax.set_yscale('log')
+         #ax.grid(True)
+     except Exception as e:
+         LOG(WARNING,f'Exception while creating correlation plot {plot_title[idx]}: {e}')
+
+
+     # Scatter OB
+     idx = 5
+     ax = axes[idx]
+     try:
+         ax.scatter(dead3[1], [3600*r for r in reco3[1]], color='blue', marker=markers[0], s=12, label='L3', alpha=0.7)
+         ax.scatter(dead4[1], [3600*r for r in reco4[1]], color='orange', marker=markers[1], s=12, label='L4', alpha=0.7)
+         ax.scatter(dead5[1], [3600*r for r in reco5[1]], color='green', marker=markers[2], s=12, label='L5', alpha=0.7)
+         ax.scatter(dead6[1], [3600*r for r in reco6[1]], color='red', marker=markers[3], s=12, label='L6', alpha=0.7)
+         
+         ax.set_xlabel("dead fraction")
+         ax.set_ylabel("recovery rate")
+         ax.set_title(plot_title[idx])
+         ax.set_xscale('log')
+         ax.set_yscale('log')
+         #ax.grid(True)
+     except Exception as e:
+         LOG(WARNING,f'Exception while creating correlation plot {plot_title[idx]}: {e}')
+
+         
 
      # ===== Save full canvas ======
      outpath = os.path.join(output_dir,'full_canvas5.png')
