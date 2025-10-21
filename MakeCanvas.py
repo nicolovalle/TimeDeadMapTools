@@ -1,6 +1,8 @@
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.collections import PatchCollection
+from matplotlib.collections import LineCollection
 from matplotlib.colors import LogNorm
 from matplotlib.colors import Normalize
 import matplotlib.colors as mcolors
@@ -367,6 +369,7 @@ def make_canvas2(
 
     #fig, axes = plt.subplots(1, 3, figsize=(14, 7))
     #axes = axes.flatten()
+    #mpl.rcParams['savefig.dpi'] = 'figure'
     fig = plt.figure(figsize=(20,10))
     gs = gridspec.GridSpec(2, 3, height_ratios=[1,0.02], hspace=0.2)
     axes = [fig.add_subplot(gs[0,i]) for i in range(3)]
@@ -554,7 +557,7 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
 
      markersize = 3
      markers = ['o', 's', 'h', 'd']
-     
+      
      # Dead time IB
      idx = 0
      ax = axes[idx]
@@ -630,9 +633,9 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      idx = 4
      ax = axes[idx]
      try:
-         ax.scatter(dead0[1], [3600*r for r in reco0[1]], color='blue', marker=markers[0], s=12, label='L0', alpha=0.7)
-         ax.scatter(dead1[1], [3600*r for r in reco1[1]], color='orange', marker=markers[1], s=12, label='L1', alpha=0.7)
-         ax.scatter(dead2[1], [3600*r for r in reco2[1]], color='green', marker=markers[2], s=12, label='L2', alpha=0.7)
+         ax.scatter(dead0[1], [3600*r for r in reco0[1]],  marker=markers[0], s=12, label='L0', alpha=0.7)
+         ax.scatter(dead1[1], [3600*r for r in reco1[1]],  marker=markers[1], s=12, label='L1', alpha=0.7)
+         ax.scatter(dead2[1], [3600*r for r in reco2[1]],  marker=markers[2], s=12, label='L2', alpha=0.7)
          
          ax.set_xlabel("dead fraction")
          ax.set_ylabel("recovery rate")
@@ -648,10 +651,10 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      idx = 5
      ax = axes[idx]
      try:
-         ax.scatter(dead3[1], [3600*r for r in reco3[1]], color='blue', marker=markers[0], s=12, label='L3', alpha=0.7)
-         ax.scatter(dead4[1], [3600*r for r in reco4[1]], color='orange', marker=markers[1], s=12, label='L4', alpha=0.7)
-         ax.scatter(dead5[1], [3600*r for r in reco5[1]], color='green', marker=markers[2], s=12, label='L5', alpha=0.7)
-         ax.scatter(dead6[1], [3600*r for r in reco6[1]], color='red', marker=markers[3], s=12, label='L6', alpha=0.7)
+         ax.scatter(dead3[1], [3600*r for r in reco3[1]],  marker=markers[0], s=12, label='L3', alpha=0.7)
+         ax.scatter(dead4[1], [3600*r for r in reco4[1]],  marker=markers[1], s=12, label='L4', alpha=0.7)
+         ax.scatter(dead5[1], [3600*r for r in reco5[1]],  marker=markers[2], s=12, label='L5', alpha=0.7)
+         ax.scatter(dead6[1], [3600*r for r in reco6[1]],  marker=markers[3], s=12, label='L6', alpha=0.7)
          
          ax.set_xlabel("dead fraction")
          ax.set_ylabel("recovery rate")
@@ -672,7 +675,166 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
      plt.close(fig)
     
              
-     
+
+##########################################
+
+def make_canvas22( 
+        lanemap={k: np.arange(100)/100 for k in range(10)},
+        idx = [[2,8], [10,20], [20,30]],
+        offset_sec = 0, # first value on the x axis
+        run = '?',
+        spec0 = '',
+        spec1 = ['','',''],
+        spec2 = '',
+        output_dir='.',
+
+        # --- performance knobs ---
+        final_dpi=500,                     # same dpi for figure and save → single render
+        png_compress_level=1,              # faster PNG writing (slightly larger file)
+        antialiased=False,                 # faster for huge images/lines
+):
+    mpl.use("Agg")
+    plt.ioff()
+
+    LOG(ERROR,f'canvas22')
+
+    # ===== Data prep (no manual rebinning) =====
+    keys   = np.asarray(list(lanemap.keys()))
+    arrays = [lanemap[k] for k in keys]
+    fulldata = np.asarray(arrays)         # shape: (nx, ny?) depends on your inputs
+    F = fulldata.T                        # we index on rows below; cache transpose once
+
+    # Time axis in minutes, with your offset and final 2s pad
+    # (we’ll still pass extent to imshow so the scale is preserved)
+    x_edges = (keys - keys[0]) * LHCOrbitNS * 1.0e-9 / 60.0 + offset_sec / 60.0
+    x_edges = np.append(x_edges, x_edges[-1] + 2/60.0)
+    x_is_sec = (x_edges[-1] - x_edges[0]) < 5
+    x_label = 'time (sec)' if x_is_sec else 'time (min)'
+    if x_is_sec:
+        x_edges = x_edges * 60.0
+
+    # ===== Figure / axes =====
+    fig = plt.figure(figsize=(20, 10), dpi=final_dpi)
+    gs = gridspec.GridSpec(2, 3, height_ratios=[1, 0.02], hspace=0.2, figure=fig)
+    axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
+
+    # Custom colormap (unchanged)
+    colors = ['#ffffff', '#5773e0', '#7b98ef', '#9FBEFF', '#C8D8F1', '#F3C6B3', '#E0664F', '#A70E2A']
+    new_cmap = mcolors.ListedColormap(colors)
+
+    plot_titles = [f'Inner Barrel{spec1[0]}', f'Layer 3,4{spec1[1]}', f'Layer 5,6{spec1[2]}']
+    hline_step = [9, 16, 28]
+
+    def getlabel(b, l):
+        if b == 0:
+            if l < 12*9:
+                return f'L0_{l//9}'
+            elif l < 28*9:
+                return f'L1_{(l-12*9)//9}'
+            else:
+                return f'L2_{(l-28*9)//9}'
+        elif b == 1:
+            if l < 24*16:
+                return f'L3_{l//16}'
+            else:
+                return f'L4_{(l-24*16)//16}'
+        else:
+            if l < 42*28:
+                return f'L5_{l//28}'
+            else:
+                return f'L6_{(l-42*28)//28}'
+
+    # Precompute X/Y extents for imshow so axes show your physical bin edges
+    # imshow expects extents as (xmin, xmax, ymin, ymax)
+    xmin, xmax = x_edges[0], x_edges[-1]
+
+    for i in range(3):
+        # Slice rows once (no manual rebinning)
+        row0, row1 = idx[i]
+        data = F[row0:row1, :]                          # shape: (ny, nx)
+        # Your original code prepended a zero row and shifted y-edges. Preserve visually:
+        data = np.vstack([np.zeros((1, data.shape[1])), data])
+
+        # Build y_edges compatible with the above data (len = rows+1)
+        y_edges = np.arange(row1 - row0 + 1)
+        y_edges = np.insert(y_edges, 0, 0 - hline_step[i])
+        ymin, ymax = y_edges[0], y_edges[-1]
+
+        ax = axes[i]
+
+        # ---- FAST path: single raster image instead of millions of quads ----
+        # Use 'nearest' to avoid costly filtering; keep exact bin look.
+        im = ax.imshow(
+            data,
+            origin='lower',
+            interpolation='nearest',
+            aspect='auto',
+            extent=(xmin, xmax, ymin, ymax),
+            cmap=new_cmap,
+            vmin=0, vmax=1
+        )
+        im.set_rasterized(True)  # harmless for PNG; ensures raster in vector backends
+        #im.set_antialiased(antialiased)
+
+        # ---- Draw gridlines in one artist via LineCollection (fast) ----
+        # Vertical lines at each x-edge:
+        # (only draw a reasonable subset if x_edges is huge; but here we keep them all.)
+        v_segments = [((xe, ymin), (xe, 0)) for xe in x_edges]
+        vcoll = LineCollection(v_segments, colors='grey', linewidths=0.2, antialiased=antialiased)
+        ax.add_collection(vcoll)
+
+        # Horizontal dashed lines every hline_step:
+        y_positions = np.arange(0, data.shape[0]-1, hline_step[i])
+        h_segments = [((xmin, y), (xmax, y)) for y in y_positions]
+        hcoll = LineCollection(h_segments, colors='grey', linewidths=0.2, linestyles='--', antialiased=antialiased)
+        ax.add_collection(hcoll)
+
+        # Baseline at y=0:
+        ax.axhline(0, color='k', linestyle='-', linewidth=0.5, antialiased=antialiased)
+
+        # Text labels at mid-groups (keep minimal; text is expensive)
+        for y in y_positions:
+            ax.text(xmin, y + hline_step[i]/2, getlabel(i, y)+' ',
+                    color='black', va='center', ha='right',
+                    fontsize=6 if i < 2 else 5)
+
+        ax.set_title(plot_titles[i])
+        ax.set_xlabel(x_label)
+        ax.set_yticklabels([])
+        ax.tick_params(axis='y', which='both', size=0)
+
+        # Tight data limits (imshow with extent already sets them, but be explicit):
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+
+    # ----- Colorbar (reuse the image mappable to avoid extra ScalarMappable) -----
+    cbar_ax = fig.add_subplot(gs[1, 1])
+    cbar_ax.tick_params(size=0)
+    # Use the last 'im' (all share same cmap/norm). If you want exact control, keep a ref list.
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal')
+    cbar.set_ticks([0.0, 1.0])
+    cbar.set_ticklabels([f"{t:.2f}" for t in [0.0, 1.0]])
+    cbar.set_ticks(np.linspace(0, 1, len(colors)))  # if you actually want every color tick
+
+    fig.suptitle(f'Run {run}{spec0}', fontsize=13, y=0.985)
+
+    # Manual layout (fast; doesn’t trigger an extra “tight” pass)
+    fig.subplots_adjust(left=0.04, right=0.98, top=0.925, bottom=0.035, wspace=0.1)
+
+    # ----- Save ONCE at the same DPI (fastest path) -----
+    name_spec = f'_{spec2}' if spec2 else ''
+    outpath = os.path.join(output_dir, f'full_canvas2{name_spec}.png')
+
+    # Faster PNG writing: lower compression, no transparency
+    fig.savefig(
+        outpath,
+        dpi=final_dpi,               # same as figure dpi → avoids extra renderer
+        transparent=False,
+        pil_kwargs={"compress_level": png_compress_level, "optimize": False}
+    )
+
+    plt.close(fig)
+    return outpath
          
          
      
