@@ -643,6 +643,20 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          ax.set_xscale('log')
          ax.set_yscale('log')
          #ax.grid(True)
+
+         xmin, xmax = ax.get_xlim()
+         ymin, ymax = ax.get_ylim()
+
+         xref = sum(dead6[1])/len(dead6[1])
+         yref = 3600*sum(reco6[1])/len(reco6[1])
+         k = yref/xref
+         xmax = min(xmax, ymax/k)
+
+         if xmax > xmin:
+             ax.plot([xmin, xmax], [k*xmin, k*xmax], linestyle='--', linewidth=0.8, color='grey', label='y = x', zorder=0)
+         else:
+             LOG(WARNING,f'Could not draw the reference line for scatter IB plot')
+
      except Exception as e:
          LOG(WARNING,f'Exception while creating correlation plot {plot_title[idx]}: {e}')
 
@@ -662,6 +676,19 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          ax.set_xscale('log')
          ax.set_yscale('log')
          #ax.grid(True)
+
+         xmin, xmax = ax.get_xlim()
+         ymin, ymax = ax.get_ylim()
+
+         xref = sum(dead6[1])/len(dead6[1])
+         yref = 3600*sum(reco6[1])/len(reco6[1])
+         k = yref/xref
+         xmax = min(xmax, ymax/k)
+
+         if xmax > xmin:
+             ax.plot([xmin, xmax], [k*xmin, k*xmax], linestyle='--', linewidth=0.8, color='grey', label='y = x', zorder=0)
+         else:
+             LOG(WARNING,f'Could not draw the reference line for scatter OB plot')
      except Exception as e:
          LOG(WARNING,f'Exception while creating correlation plot {plot_title[idx]}: {e}')
 
