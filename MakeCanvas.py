@@ -647,8 +647,8 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          xmin, xmax = ax.get_xlim()
          ymin, ymax = ax.get_ylim()
 
-         xref = sum(dead6[1])/len(dead6[1])
-         yref = 3600*sum(reco6[1])/len(reco6[1])
+         xref = sum(dead1[1])/len(dead1[1])
+         yref = 3600*sum(reco1[1])/len(reco1[1])
          k = yref/xref
          xmax = min(xmax, ymax/k)
 
