@@ -648,11 +648,14 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
 
          xref = (sum(dead0[1])+sum(dead1[1])+sum(dead2[1]))/(len(dead0[1])+len(dead1[1])+len(dead2[1]))
          yref = 3600*(sum(reco0[1])+sum(reco1[1])+sum(reco2[1]))/(len(reco0[1])+len(reco1[1])+len(reco2[1]))
-         k = yref/xref
-         xmax = min(xmax, ymax/k)
+         kLin = yref/xref
+         kQuad = yref/(xref*xref)
+         xmaxLin = min(xmax, ymax/kLin)
+         xmaxQuad = min(xmax, np.sqrt(ymax/kQuad))
 
-         if xmax > xmin:
-             ax.plot([xmin, xmax], [k*xmin, k*xmax], linestyle='--', linewidth=0.8, color='grey', label='y = x', zorder=0)
+         if xmaxLin > xmin and xmaxQuad > xmin:
+             ax.plot([xmin, xmax], [kLin*xmin, kLin*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
+             ax.plot([xmin, xmax], [kQuad*xmin*xmin, kQuad*xmax*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
          else:
              LOG(WARNING,f'Could not draw the reference line for scatter IB plot')
 
@@ -681,11 +684,14 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
 
          xref = (sum(dead3[1])+sum(dead4[1])+sum(dead5[1])+sum(dead6[1]))/(len(dead3[1])+len(dead4[1])+len(dead5[1])+len(dead6[1]))
          yref = 3600*(sum(reco3[1])+sum(reco4[1])+sum(reco5[1])+sum(reco6[1]))/(len(reco3[1])+len(reco4[1])+len(reco5[1])+len(reco6[1]))
-         k = yref/xref
-         xmax = min(xmax, ymax/k)
+         kLin = yref/xref
+         kQuad = yref/(xref*xref)
+         xmaxLin = min(xmax, ymax/kLin)
+         xmaxQuad = min(xmax, np.sqrt(ymax/kQuad))
 
-         if xmax > xmin:
-             ax.plot([xmin, xmax], [k*xmin, k*xmax], linestyle='--', linewidth=0.8, color='grey', label='y = x', zorder=0)
+         if xmaxLin > xmin and xmaxQuad > xmin:
+             ax.plot([xmin, xmax], [kLin*xmin, kLin*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
+             ax.plot([xmin, xmax], [kQuad*xmin*xmin, kQuad*xmax*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
          else:
              LOG(WARNING,f'Could not draw the reference line for scatter OB plot')
      except Exception as e:
