@@ -11,7 +11,7 @@ from mylogger import *
 
 
 json_input = 'DeadMapJSON.json'
-log_file = 'QApy_lanedebug.log'
+log_file = 'QApy.log'
 traceback_file = 'exc.err'
 
 NominalGap = 380*32
