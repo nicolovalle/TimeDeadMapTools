@@ -11,7 +11,7 @@ from mylogger import *
 
 
 json_input = 'DeadMapJSON.json'
-log_file = 'QApy.log'
+log_file = 'QApy_lanedebug.log'
 traceback_file = 'exc.err'
 
 NominalGap = 380*32
@@ -424,10 +424,11 @@ def main(doGraphics = True):
         DeadFractionIB.append(IBdead / N_CHIPS_IB)
         DeadFractionOB.append(OBdead / N_CHIPS_OB)
 
-        # Fraction of dead chip
+        # Fraction of dead chips per Stave
         LayDead = NDead(currentmap,'layers','chip') #LayDead[4] = number of dead chips in L4
-        for ilay in range(7):
-            DeadFractionLay[ilay].append(LayDead[ilay] / vNStaves[ilay] / chipsPerStave[ilay])
+                
+        for ilay in range(7): 
+            DeadFractionLay[ilay].append(LayDead[ilay] / (vNStaves[ilay] * vNLanesPerStave[ilay] * vNChipsPerLane[ilay]))
         
 
         # Build array of indices with large dead time (>=zoom_threshold)
@@ -505,6 +506,9 @@ def main(doGraphics = True):
     AvgDeadTimeOB = np.mean(LaneDeadTimeNoRamp[N_LANES_IB:])
     
     LOG(INFO,f'Lanes with single dead chips: {len(LanesWithSingleChip)}')
+
+    ### LOG for debug and other studies
+    # Lanes with single chips
     LOG(DEBUG,f'LWSC run {run} duration {rctduration:.1f} lanes {" ".join(str(x) for x in sorted(LanesWithSingleChip))}')
     if len(LanesWithSingleChip) < 50:
         lnames = ''
@@ -512,6 +516,17 @@ def main(doGraphics = True):
             _, _, la_, st_, ll_ = Mapping(lane=l_)
             lnames += f'L{la_}_{st_}_{ll_} '
         LOG(DEBUG,f'LNWSC {lnames}')
+    # Lanes almost completely dead
+    lacd = [ilane for ilane in range(N_LANES) if LaneDeadTimeNoRamp[ilane] >= 0.95]
+    LOG(DEBUG,f'LACD run {run} duration {rctduration:.1f} lanes {" ".join(str(x) for x in sorted(lacd))}')
+    if len(LanesWithSingleChip) < 100:
+        lnames = ''
+        for l_ in sorted(lacd):
+            _, _, la_, st_, ll_ = Mapping(lane=l_)
+            lnames += f'L{la_}_{st_}_{ll_} '
+        LOG(DEBUG,f'LNACD {lnames}')
+   
+    
     
     wind_size = 900 if maprange > 8*60*60 else 300
 

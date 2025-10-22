@@ -423,14 +423,13 @@ def make_canvas2(
         y_edges = np.insert(y_edges, 0, 0-hline_step[i])
 
 
-   
         # Select the second axis for the plot
         ax = axes[i]
-
-       
         
         # Plot the data using pcolormesh (respecting x and y bin edges)
         c = ax.pcolormesh(x_edges, y_edges, data, cmap=new_cmap, shading='auto', vmin=0, vmax=1)
+        #TO BE TRIED: c = ax.pcolorfast(x_edges, y_edges, data, cmap=new_cmap, vmin=0, vmax=1)
+
 
         
         for y in range(0, data.shape[0]-1, hline_step[i]):
@@ -647,8 +646,8 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          xmin, xmax = ax.get_xlim()
          ymin, ymax = ax.get_ylim()
 
-         xref = sum(dead1[1])/len(dead1[1])
-         yref = 3600*sum(reco1[1])/len(reco1[1])
+         xref = (sum(dead0[1])+sum(dead1[1])+sum(dead2[1]))/(len(dead0[1])+len(dead1[1])+len(dead2[1]))
+         yref = 3600*(sum(reco0[1])+sum(reco1[1])+sum(reco2[1]))/(len(reco0[1])+len(reco1[1])+len(reco2[1]))
          k = yref/xref
          xmax = min(xmax, ymax/k)
 
@@ -680,8 +679,8 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          xmin, xmax = ax.get_xlim()
          ymin, ymax = ax.get_ylim()
 
-         xref = sum(dead6[1])/len(dead6[1])
-         yref = 3600*sum(reco6[1])/len(reco6[1])
+         xref = (sum(dead3[1])+sum(dead4[1])+sum(dead5[1])+sum(dead6[1]))/(len(dead3[1])+len(dead4[1])+len(dead5[1])+len(dead6[1]))
+         yref = 3600*(sum(reco3[1])+sum(reco4[1])+sum(reco5[1])+sum(reco6[1]))/(len(reco3[1])+len(reco4[1])+len(reco5[1])+len(reco6[1]))
          k = yref/xref
          xmax = min(xmax, ymax/k)
 
