@@ -528,7 +528,7 @@ def main(doGraphics = True):
    
     
     
-    wind_size = 900 if maprange > 8*60*60 else 300
+    wind_size = 1200 if maprange > 12*60*60 else 900 if maprange > 8*60*60 else 600 if maprange > 5*60*60 else 300
 
     LOG(INFO,f'Using {wind_size} sec as window for the rolling average')
 

@@ -359,9 +359,29 @@ def make_canvas2(
 
 
     LOG(INFO,f'Creating canvas 2 {spec2}')
+    
     # Extract the keys and arrays from the lanemap
     keys = list(lanemap.keys())  # x-axis values (keys of the lanemap dictionary)
-    arrays = [lanemap[k] for k in keys]  # Corresponding y-values (arrays)
+    cansize = (20,10)
+    candpi = 500
+    LOG(INFO,f'Evaluating sampling the map for display')
+    scale_legend = "No sampling"
+    if max([keys[i] - keys[i-1] for i in range(1,len(keys))]) > 17000: # approx 1.5 seconds
+        LOG(INFO,f'There are large gaps, original size {len(keys)} will be kept')
+        arrays = [lanemap[k] for k in keys]  # Corresponding y-values (arrays)
+    else:
+        maxbinpp = candpi*cansize[0]/3
+        scale0 = int(len(keys) / maxbinpp)-1
+        if scale0 < 2:
+            LOG(INFO,f'Not so many points, original size {len(keys)} will be kept')
+            arrays = [lanemap[k] for k in keys]  # Corresponding y-values (arrays)
+        else:
+            keys = keys[::scale0]
+            LOG(INFO,f'Sampling every {scale0} entry of the original map. Sampled map has {len(keys)} entries')
+            arrays = [lanemap[k] for k in keys]  # Corresponding y-values (arrays)
+            scale_legend = f"Sampled 1:{scale0}"
+    
+    
 
     # Convert arrays into a 2D numpy array
     fulldata = np.array(arrays)
@@ -370,7 +390,7 @@ def make_canvas2(
     #fig, axes = plt.subplots(1, 3, figsize=(14, 7))
     #axes = axes.flatten()
     #mpl.rcParams['savefig.dpi'] = 'figure'
-    fig = plt.figure(figsize=(20,10))
+    fig = plt.figure(figsize=cansize)
     gs = gridspec.GridSpec(2, 3, height_ratios=[1,0.02], hspace=0.2)
     axes = [fig.add_subplot(gs[0,i]) for i in range(3)]
 
@@ -474,7 +494,10 @@ def make_canvas2(
         bottom=0.035,
         wspace=0.1
     )
-    fig.savefig(outpath, dpi=500)
+
+    plt.figtext(0.02, 0.02, scale_legend, ha="left", va="bottom", fontsize=8, color="gray")
+        
+    fig.savefig(outpath, dpi=candpi)
     #fig.show()
 
     # Close the figure to release resources
@@ -651,11 +674,13 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          kLin = yref/xref
          kQuad = yref/(xref*xref)
          xmaxLin = min(xmax, ymax/kLin)
+         xminLin = max(xmin, ymin/kLin)
          xmaxQuad = min(xmax, np.sqrt(ymax/kQuad))
+         xminQuad = max(xmin, np.sqrt(ymin/kQuad))
 
          if xmaxLin > xmin and xmaxQuad > xmin:
-             ax.plot([xmin, xmax], [kLin*xmin, kLin*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
-             ax.plot([xmin, xmax], [kQuad*xmin*xmin, kQuad*xmax*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
+             ax.plot([xminLin, xmaxLin], [kLin*xminLin, kLin*xmaxLin], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
+             ax.plot([xminQuad, xmaxQuad], [kQuad*xminQuad*xminQuad, kQuad*xmaxQuad*xmaxQuad], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
          else:
              LOG(WARNING,f'Could not draw the reference line for scatter IB plot')
 
@@ -687,11 +712,13 @@ def make_canvas5(dead0 = [[i for i in range(5)], [10-i for i in range(5)]],
          kLin = yref/xref
          kQuad = yref/(xref*xref)
          xmaxLin = min(xmax, ymax/kLin)
+         xminLin = max(xmin, ymin/kLin)
          xmaxQuad = min(xmax, np.sqrt(ymax/kQuad))
+         xminQuad = max(xmin, np.sqrt(ymin/kQuad))
 
          if xmaxLin > xmin and xmaxQuad > xmin:
-             ax.plot([xmin, xmax], [kLin*xmin, kLin*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
-             ax.plot([xmin, xmax], [kQuad*xmin*xmin, kQuad*xmax*xmax], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
+             ax.plot([xminLin, xmaxLin], [kLin*xminLin, kLin*xmaxLin], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0)
+             ax.plot([xminQuad, xmaxQuad], [kQuad*xminQuad*xminQuad, kQuad*xmaxQuad*xmaxQuad], linestyle='--', linewidth=0.5, color='grey', label='y = x', zorder=0) # valid only in log-log scale
          else:
              LOG(WARNING,f'Could not draw the reference line for scatter OB plot')
      except Exception as e:
