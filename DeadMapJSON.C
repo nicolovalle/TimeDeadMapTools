@@ -57,19 +57,19 @@ float LHCOrbitNS = 88924.6; // o2::constants::lhc::LHCOrbitNS
 
 
 std::vector<uint16_t> expandvector(std::vector<uint16_t> words, int version);
-bool fillmap(TString fname);
+bool fillmap(TString fname, int map_sampling);
 
 
   
 //////////////// _ MAIN _ /////////////////////
-void DeadMapJSON(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./"){
+void DeadMapJSON(TString FILENAME = InputFile, int runnumber = -1, TString outdir="./", int map_sampling=1){
 
   QALOG.open(outdir+logfilename);
   QAcheck.clear();
 
   QALOG<<"Reading file "<<FILENAME<<". Run "<<runnumber<<"\n";
 
-  bool mapdecoded = fillmap(FILENAME); // fill both MAP and SMAP. False if vector is not filled.
+  bool mapdecoded = fillmap(FILENAME, map_sampling); // fill both MAP and SMAP. False if vector is not filled.
 
   if (!mapdecoded){
     QAcheck["Map decoded"] = "FATAL";
@@ -165,7 +165,7 @@ std::vector<uint16_t> expandvector(std::vector<uint16_t> words, std::string vers
       
 
 
-bool fillmap(TString fname){
+bool fillmap(TString fname, int map_sampling){
 
   MAP.clear();
   MAPKeys.clear();
@@ -214,7 +214,7 @@ bool fillmap(TString fname){
   //  return false;
   //}
  
-  for (int i=0; i<MAPKeys.size(); i++){
+  for (int i=0; i<MAPKeys.size(); i+=map_sampling){
 
     if (i%1000==0){
       cout<<"step "<<i/1000<<"k"<<endl;
