@@ -309,9 +309,13 @@ def main(doGraphics = True):
                 
         
     lanemap = dict(sorted(lanemap.items()))
+
+    # Neet to recompute the keys becuase null orbit has been removed
     if [jj for jj in keys if jj > 0] != list(lanemap.keys()):
         LOG(FATAL,f'Error in building the list of keys. Probably there were not ordered at the source. Exiting')
         exit()
+    else:
+        keys = list(lanemap.keys())
 
     staticchipmap2 = np.where(counter_chip_by_chip == len(keys))[0].tolist() # when OB single chips are saved, this should be equal to statichipmap
 
