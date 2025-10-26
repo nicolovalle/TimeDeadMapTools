@@ -4,13 +4,14 @@ import traceback
 import time
 import os
 import sys
+import uproot
 
 import MakeCanvas
 from mylogger import *
 
 
 
-json_input = 'DeadMapJSON.json'
+tree_input = 'DeadMapTREE.root'
 log_file = 'QApy.log'
 traceback_file = 'exc.err'
 
@@ -218,11 +219,12 @@ def LogQAchecks(checks):
 def process_vector(kv): # function to parallelize over the orbits
     k, vec = kv
     #LOG(DEBUG,f'Orbit {k}')
-    if isinstance(k,int) or k.isdigit():
+    if True:
         n_dead_l = np.zeros(N_LANES)
         n_dead_s = np.zeros(N_STAVES)
         chip_flg = np.zeros(N_CHIPS) # 1 if dead
-        for c in vec:
+        for C in vec:
+            c = int(C)
             lan, sta, _, _, _ = Mapping(chip=c)
             n_dead_l[lan] += 1
             n_dead_s[sta] += 1
@@ -241,24 +243,30 @@ def main(doGraphics = True):
     global QAcheck
     global GLO_RUN
     
-    LOG(INFO,f'Start. Importing data from {json_input}')
+    LOG(INFO,f'Start. Importing data from {tree_input}')
 
     now_ = time.time()
 
-    with open(json_input) as f:
-        raw_data = json.load(f)
+    with uproot.open(tree_input) as f:
+        t_static = f["t_static"].arrays(library="np")
+        staticchipmap1 = list(t_static["static"][0])
+        run = int(t_static["run"][0])
+        LOG(INFO,f'Run number: {run}')
+        GLO_RUN = run
+        rctstart = int(t_static["rctstart"][0])
+        rctstop  = int(t_static["rctstop"][0])
+        version = int(t_static["version"][0])
+        isdefault = bool(t_static["isdefault"][0])
+        fatalcheck = list(t_static["fatal"][0])
+        exp_norb = int(t_static["nkeys"][0])
 
-    #chipmap = {int(k): v for k,v in raw_data.items()}
+        t_dynamic = f["t_dynamic"].arrays(library="np")
+        nwords = list(t_dynamic['nwords'])
+        keys = list(t_dynamic['key'])
+       
+        
 
-    staticchipmap1 = list(raw_data['static'])
-    run = int(raw_data['run'])
-    LOG(INFO,f'Run number: {run}')
-    GLO_RUN = run
-    rctstart = int(raw_data['rctstart'])
-    rctstop = int(raw_data['rctstop'])
-    version = int(raw_data['version'])
-    isdefault = bool(raw_data['isdefault'])
-    fatalcheck = list(raw_data['fatal'])
+        
     lanemap = {}
     stavemap = {} # stavemap[orbit] = number of chips dead in the stave at that step
     ndeadchips = [] # ndeadchips[i] = total number of dead chips at step i --> to be implemented
@@ -269,14 +277,14 @@ def main(doGraphics = True):
 
     parallelize = True
 
-    exp_norb = len(raw_data['nwords'])
     exp_eta = int(exp_norb/1000)
 
     if parallelize:
         import concurrent.futures
         LOG(INFO,f'CPU count = {os.cpu_count()}. Expected size {exp_norb}, {exp_eta} seconds to import it.')
         with concurrent.futures.ProcessPoolExecutor() as tor:
-            futures = tor.map(process_vector, raw_data.items())
+            #futures = tor.map(process_vector, raw_data.items())
+            futures = tor.map(process_vector, list(zip(keys, t_dynamic["deadchips"])))
             for k, v1, v2, v3, n3, zeroOrb in futures:
                 if not zeroOrb and k is not None:
                     lanemap[int(k)] = v1
@@ -301,8 +309,9 @@ def main(doGraphics = True):
                 
         
     lanemap = dict(sorted(lanemap.items()))
-            
-    keys = list(lanemap.keys())
+    if keys != list(lanemap.keys()):
+        LOG(FATAL,f'Error in building the list of keys. Probably there were not ordered at the source. Exiting')
+        exit()
 
     staticchipmap2 = np.where(counter_chip_by_chip == len(keys))[0].tolist() # when OB single chips are saved, this should be equal to statichipmap
 
@@ -642,7 +651,7 @@ def main(doGraphics = True):
                 gaps = gaps,
                 dead_fraction = [{'both':list(range(len(keys)))}, {'IB':DeadFractionIB, 'OB':DeadFractionOB}],
                 dead_fraction_rolling = [{'IB':(DeadFrac_rolling_IB_x/60).tolist(), 'OB':(DeadFrac_rolling_IB_x/60).tolist()}, {'IB':DeadFrac_rolling_IB_y.tolist(), 'OB':DeadFrac_rolling_OB_y.tolist()}],
-                words = [[],list(raw_data['nwords'])], # first is dummy for the number of dead chips step by step... to be implemented
+                words = [[],nwords], # first is dummy for the number of dead chips step by step... to be implemented
                 WorstOBstep = WorstOBStep,
                 WorstIBstep = WorstIBStep,
                 worst_ob = WorstOBLaneDeadFraction.tolist(),
@@ -751,7 +760,7 @@ if __name__ == "__main__":
        {sys.argv[0]} [no-graphics]
        or
        {sys.argv[0]} input.json [no-graphics]
-       default input is {json_input}
+       default input is {tree_input}
     """
 
     if '-h' in sys.argv or '--help' in sys.argv:
@@ -760,9 +769,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1:
         if '.json' in sys.argv[1]:
-            json_input = str(sys.argv[1])
+            tree_input = str(sys.argv[1])
 
-    LOG(INFO,f'Running QA on file {json_input}')
+    LOG(INFO,f'Running QA on file {tree_input}')
     nographics = 'no-graphics' in sys.argv
     main(not nographics)
     with open("QAHANDSHAKE", "w") as f:
