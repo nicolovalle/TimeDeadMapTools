@@ -262,7 +262,7 @@ def main(doGraphics = True):
 
         t_dynamic = f["t_dynamic"].arrays(library="np")
         nwords = list(t_dynamic['nwords'])
-        keys = list(t_dynamic['key'])
+        rawkeys = list(t_dynamic['key'])
        
         
 
@@ -284,7 +284,7 @@ def main(doGraphics = True):
         LOG(INFO,f'CPU count = {os.cpu_count()}. Expected size {exp_norb}, {exp_eta} seconds to import it.')
         with concurrent.futures.ProcessPoolExecutor() as tor:
             #futures = tor.map(process_vector, raw_data.items())
-            futures = tor.map(process_vector, list(zip(keys, t_dynamic["deadchips"])))
+            futures = tor.map(process_vector, list(zip(rawkeys, t_dynamic["deadchips"])))
             for k, v1, v2, v3, n3, zeroOrb in futures:
                 if not zeroOrb and k is not None:
                     lanemap[int(k)] = v1
@@ -311,11 +311,10 @@ def main(doGraphics = True):
     lanemap = dict(sorted(lanemap.items()))
 
     # Neet to recompute the keys becuase null orbit has been removed
-    if [jj for jj in keys if jj > 0] != list(lanemap.keys()):
+    if [jj for jj in rawkeys if jj > 0] != list(lanemap.keys()):
         LOG(FATAL,f'Error in building the list of keys. Probably there were not ordered at the source. Exiting')
         exit()
-    else:
-        keys = list(lanemap.keys())
+    keys = list(lanemap.keys())
 
     staticchipmap2 = np.where(counter_chip_by_chip == len(keys))[0].tolist() # when OB single chips are saved, this should be equal to statichipmap
 
@@ -622,12 +621,14 @@ def main(doGraphics = True):
 
        
     Text1 =  f'k#Orbit keys: {len(keys)}'
-    Text1 += '#k#' + ','.join(hex(o) for o in keys[:3]) + '...#k#...' + ','.join(hex(o) for o in keys[-3:])
+    if len(rawkeys) - len(keys) > 0:
+        Text1 += f' + {len(rawkeys)-len(keys)} neglected'
+    Text1 += '#k#' + ','.join(hex(o) for o in rawkeys[:3]) + '...#k#...' + ','.join(hex(o) for o in rawkeys[-3:])
+    if zeroOrbitFound:
+        Text1 += f'#w#empty#r#First key orbit = 0 has been neglected'
     Text1 += f'#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
     Text1 += f'#w#empty#k#Dead chips (IB+OB): {FullyDeadIB} + {FullyDeadOB}'
     Text1 += f'#k#OB lanes w/ single dead chips: {len(LanesWithSingleChip)}'
-    if zeroOrbitFound:
-        Text1 += f'#w#empty#r#First key orbit = 0 has been neglected'
     if clusterizer_summary:
         Text1 += f'#w#empty#k#{clusterizer_summary}'
 
