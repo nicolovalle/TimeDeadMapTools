@@ -309,7 +309,7 @@ def main(doGraphics = True):
                 
         
     lanemap = dict(sorted(lanemap.items()))
-    if keys != list(lanemap.keys()):
+    if [jj for jj in keys if jj > 0] != list(lanemap.keys()):
         LOG(FATAL,f'Error in building the list of keys. Probably there were not ordered at the source. Exiting')
         exit()
 
