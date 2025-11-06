@@ -86,21 +86,26 @@ def Traceback(severity, *message):
 def Mapping(dummy='dummy',chip='na',lane='na'): # use either chip or lane
 
     if dummy != 'dummy':
-        LOG(FATAL,'Invalid use. Exiting to avoid troubles')
+        LOG(FATAL,f'Invalid use. dummy={dummy}, chip={chip}, lane={lane}. Exiting to avoid troubles')
         exit()
 
-    if isinstance(chip,int):
-        if chip < N_LANES_IB:
-            lane = chip
+    if chip != 'na':
+        if int(chip) < N_LANES_IB:
+            lane_ = int(chip)
         else:
-            lane = N_LANES_IB + (chip - N_LANES_IB) // 7
+            lane_ = N_LANES_IB + (int(chip) - N_LANES_IB) // 7
+    elif lane != 'na':
+        lane_ = int(lane)
+    else:
+        LOG(FATAL,f'Ivalid use of Mapping: dummy={dummy}, chip={chip}, lane={lane}. Exiting')
+        exit()
 
     layer = 0
-    laneinlayer = lane
+    laneinlayer = lane_
     for i in range(1,7):
-        if lane >= vLaneBound[i]:
+        if lane_ >= vLaneBound[i]:
             layer = i
-            laneinlayer = lane - vLaneBound[i]
+            laneinlayer = lane_ - vLaneBound[i]
 
     staveinlayer, laneinstave = divmod(laneinlayer, vNLanesPerStave[layer])
     stave = 0
@@ -108,7 +113,7 @@ def Mapping(dummy='dummy',chip='na',lane='na'): # use either chip or lane
         stave += int(l<layer)*vNStaves[l] + int(l==layer)*staveinlayer
 
     #return lane, stave, staveinlayer, layer
-    return lane, stave, layer, staveinlayer, laneinstave
+    return lane_, stave, layer, staveinlayer, laneinstave
     
 
 #_________________________________________________
