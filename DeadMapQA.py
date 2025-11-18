@@ -160,7 +160,7 @@ def TimeRollingAverage(x,y,window_size=300):
 #______________________________________________
 def index_clusterizer(steps, full_keys, padding_sec=60):  # passing list interesting steps and full list of orbits. Returning list (a,b) where a and b are the first and last index of each cluster
 
-    if not steps:
+    if not steps or len(full_keys) < 2:
         LOG(INFO,f'Returning 0 clusters')
         return []
 
