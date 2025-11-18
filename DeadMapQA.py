@@ -673,6 +673,12 @@ def main(doGraphics = True):
             )
         except Exception as e:
             Traceback(ERROR,f'Exception canvas 1: {e}')
+
+        if len(keys) < 2:
+            QAcheck['Map size'] = 'FATAL'
+            LogQAchecks(QAcheck)
+            LOG(WARNING,f'Map contains only 1 key. Returning FATAL without further actions for this run {run}')
+            return 'FATAL'    
     
         lanemap_fraction = {}
         for k,vec in lanemap.items():
