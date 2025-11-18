@@ -506,6 +506,7 @@ def make_canvas2(
 
 def make_canvas4( 
         lane_dead_time = [0.1*i for i in range(9)]*(3816//9),
+        stave_dead_time = [0.1 * i for i in range(192)],
         idx = [[0, 108], [108, 252], [252, 432], [432, 816], [816, 1296], [1296, 2472], [2472, 3816]],
         run = '?'
         ):
@@ -514,18 +515,30 @@ def make_canvas4(
     
     # Convert arrays into a 2D numpy array
     fulldata = np.array(lane_dead_time)
-
+    
 
     fig, axes = plt.subplots(7, 1, figsize=(5, 15))
     axes = axes.flatten()
 
     vsteps = [9,9,9,16,16,28,28]
+    globalstavecounter = 0
     for i in [0,1,2,3,4,5,6]:
         X = np.arange(idx[i][1]-idx[i][0]+1)
         Y = fulldata[idx[i][0]:idx[i][1]]
         Y = np.append(Y,0)
 
         ax = axes[i]
+
+        
+        for x in range(0, len(X)-1, vsteps[i]):
+            ax.axvline(x, color='grey', linestyle='--', linewidth=0.2)
+            ax.text(x+1, 1.3, x//vsteps[i], color='k', fontsize=4)
+            stavedtime = stave_dead_time[globalstavecounter]
+            ax.plot([x, x+vsteps[i]], [stavedtime, stavedtime], ls='--', color='#ed7014', linewidth=0.3)
+            globalstavecounter += 1
+
+        if i==0:
+            ax.text(108, 4, f'Lane and stave dead time after trigger ramp - run {run}', color='k', ha='right', fontsize=7)
 
         ax.step(X,Y, where='post', color='blue', linewidth=0.2)
         ax.set_xlim(X[0],X[-1])
@@ -534,14 +547,6 @@ def make_canvas4(
         ax.set_ylabel(f'Layer {i}')
         ax.set_xticklabels([])
         ax.tick_params(axis='x', which='both', size=0)
-
-        
-        for x in range(0, len(X)-1, vsteps[i]):
-            ax.axvline(x, color='grey', linestyle='--', linewidth=0.2)
-            ax.text(x+1, 1.3, x//vsteps[i], color='k', fontsize=4)
-
-        if i==0:
-            ax.text(108, 4, f'Lane dead time after trigger ramp - run {run}', color='k', ha='right', fontsize=7)
 
     outpath = os.path.join(output_dir, 'full_canvas4.png')
     plt.tight_layout()
