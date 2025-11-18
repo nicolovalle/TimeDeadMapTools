@@ -694,6 +694,7 @@ def main(doGraphics = True):
         try:
             MakeCanvas.make_canvas4(
                 lane_dead_time = LaneDeadTimeNoRamp.tolist(),
+                stave_dead_time = StaveDeadTimeNoRamp.tolist(),
                 run=run
                 )
         except Exception as e:
