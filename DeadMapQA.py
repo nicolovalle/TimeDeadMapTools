@@ -582,7 +582,7 @@ def main(doGraphics = True):
         QAcheck['Map size'] = 'GOOD'
         if len(staticchipmap) == 0:
             QAcheck['Map size'] = 'BAD'
-        if len(keys) == 0:
+        if len(keys) < 2:
             QAcheck['Map size'] = 'FATAL'
 
     ## Null orbit
@@ -674,10 +674,8 @@ def main(doGraphics = True):
         except Exception as e:
             Traceback(ERROR,f'Exception canvas 1: {e}')
 
-        if len(keys) < 2:
-            QAcheck['Map size'] = 'FATAL'
-            LogQAchecks(QAcheck)
-            LOG(WARNING,f'Map contains only 1 key. Returning FATAL without further actions for this run {run}')
+        if QAcheck['Map size'] == 'FATAL':
+            LOG(WARNING,f'Map contains {len(keys)} key. Returning FATAL without further actions for this run {run}')
             return 'FATAL'    
     
         lanemap_fraction = {}
