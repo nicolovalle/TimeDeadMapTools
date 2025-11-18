@@ -416,7 +416,7 @@ def main(doGraphics = True):
     SecForTriggerRamp = -1
     for i in range(len(keys)):
 
-        if i % (len(keys) // 4) == 0:
+        if i % (1 + len(keys) // 4) == 0:
             LOG(INFO,f'{i} / {len(keys)}...')
 
         currentorbit = keys[i]
