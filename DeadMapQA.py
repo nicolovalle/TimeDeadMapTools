@@ -513,7 +513,7 @@ def main(doGraphics = True):
         LaneDeadTimeNoRamp[:] = NA
         recoIBperH = NA
         recoOBperH = NA
-        StaveRecovertPerHour[:] = NA
+        StaveRecoveryPerHour[:] = NA
 
     lane_to_stave = np.array([Mapping(lane=l)[1] for l in range(N_LANES)])
     StaveDeadTimeNoRamp = np.bincount(lane_to_stave, weights=LaneDeadTimeNoRamp) / np.bincount(lane_to_stave)
