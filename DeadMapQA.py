@@ -260,6 +260,7 @@ def main(doGraphics = True):
         GLO_RUN = run
         rctstart = int(t_static["rctstart"][0])
         rctstop  = int(t_static["rctstop"][0])
+        firstorbitrun = int(t_static["firstorbitrun"][0])
         version = int(t_static["version"][0])
         isdefault = bool(t_static["isdefault"][0])
         fatalcheck = list(t_static["fatal"][0])
@@ -373,10 +374,15 @@ def main(doGraphics = True):
     maprange = (maxorbit - minorbit) * LHCOrbitNS * 1.e-9
     rctduration = (rctstop-rctstart) / 1000 if rctstart > 0 else -1
 
+    offsetstart = minorbit - firstorbitrun
+    offsetstartsec = offsetstart * LHCOrbitNS * 1.e-9
+
     LOG(INFO,f'Run {run}')
     LOG(INFO,f'Evolving map size: {len(keys)}')
     LOG(INFO,f'Map range {minorbit} to {maxorbit}, in seconds: {maprange}')
     LOG(INFO,f'Run duration from RCT object, in seconds: {rctduration}')
+    LOG(INFO,f'Orbit at run start {firstorbitrun}')
+    LOG(INFO,f'Delta first orbit map-run {offsetstart} = {offsetstartsec} sec')
 
 
     FullyDeadIB = int(NDead(staticlanemap, 'IB', 'chip'))
@@ -610,6 +616,9 @@ def main(doGraphics = True):
         'MEDIUM' if maprange >= rctduration - 30 else \
         'BAD'
 
+    if QAcheck['Orbit range'] == 'GOOD' and abs(offsetstartsec) > 5:
+        QAcheck['Orbit range'] = 'BAD'
+
     ## Unanchorable fraction
     QAcheck['Un-anchorable fraction'] = 'GOOD' if unAnchorableFrac < 0.02 else 'MEDIUM' if unAnchorableFrac < 0.05 else 'BAD'
     
@@ -629,6 +638,8 @@ def main(doGraphics = True):
     if len(rawkeys) - len(keys) > 0:
         Text1 += f' + {len(rawkeys)-len(keys)} neglected'
     Text1 += '#k#' + ','.join(hex(o) for o in rawkeys[:3]) + '...#k#...' + ','.join(hex(o) for o in rawkeys[-3:])
+    Text1 += f'#w#empty#k#Orbit at run start: {hex(firstorbitrun)}'
+    
     if zeroOrbitFound:
         Text1 += f'#w#empty#r#First key orbit = 0 has been neglected'
     Text1 += f'#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
