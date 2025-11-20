@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import traceback
+from functools import partial
 import time
 import os
 import sys
@@ -37,12 +38,13 @@ vNChipsPerLane = [1, 1, 1, 7, 7, 7, 7]
 
 chipsPerStave = np.array([9 if s < N_STAVES_IB else 112 if s < N_STAVES_IB+24+30 else 196 for s in range(N_STAVES)])
 
-
 LHCOrbitNS = 88924.6
 
 QAcheck = {}
 QAFLAG = 'UNKNOWN' # Updated when printing with the worst score
 GLO_RUN = 0
+FORUN = -1 # first orbit run
+LORUN = -1 # last orbit run
 
 NA = -111
 
@@ -222,24 +224,19 @@ def LogQAchecks(checks):
     
 #_______________________________________________
 def process_vector(kv): # function to parallelize over the orbits
-    k, vec = kv
-    #LOG(DEBUG,f'Orbit {k}')
-    if True:
-        n_dead_l = np.zeros(N_LANES)
-        n_dead_s = np.zeros(N_STAVES)
-        chip_flg = np.zeros(N_CHIPS) # 1 if dead
-        for C in vec:
-            c = int(C)
-            lan, sta, _, _, _ = Mapping(chip=c)
-            n_dead_l[lan] += 1
-            n_dead_s[sta] += 1
-            chip_flg[c] += 1
-        zeroOrbit = False
-        if int(k) == 0 and len(vec) == N_CHIPS:
-            zeroOrbit = True
-        return k, n_dead_l, n_dead_s, chip_flg, np.sum(chip_flg), zeroOrbit
-    else:
-        return None, None, None, None, None, None
+    
+    k, vec = kv    
+    n_dead_l = np.zeros(N_LANES)
+    n_dead_s = np.zeros(N_STAVES)
+    chip_flg = np.zeros(N_CHIPS) # 1 if dead
+    for C in vec:
+        c = int(C)
+        lan, sta, _, _, _ = Mapping(chip=c)
+        n_dead_l[lan] += 1
+        n_dead_s[sta] += 1
+        chip_flg[c] += 1
+    return k, n_dead_l, n_dead_s, chip_flg, np.sum(chip_flg)
+    
 
 #________ MAIN ________________________________
 def main(doGraphics = True):
@@ -260,7 +257,7 @@ def main(doGraphics = True):
         GLO_RUN = run
         rctstart = int(t_static["rctstart"][0])
         rctstop  = int(t_static["rctstop"][0])
-        firstorbitrun = int(t_static["firstorbitrun"][0])
+        orbitreset = int(t_static["orbitreset"][0])
         version = int(t_static["version"][0])
         isdefault = bool(t_static["isdefault"][0])
         fatalcheck = list(t_static["fatal"][0])
@@ -269,7 +266,14 @@ def main(doGraphics = True):
         t_dynamic = f["t_dynamic"].arrays(library="np")
         nwords = list(t_dynamic['nwords'])
         rawkeys = list(t_dynamic['key'])
-       
+
+
+    if orbitreset > 0 and rctstart > 0 and rctstop > 0:
+        firstorbitrun = int((rctstart - orbitreset) / (LHCOrbitNS * 1.e-6))  # millisec / millisec
+        lastorbitrun = int((rctstop - orbitreset) / (LHCOrbitNS * 1.e-6))  # millisec / millisec
+    else:
+        firstorbitrun = lastorbitrun = -1
+        
         
 
         
@@ -279,27 +283,47 @@ def main(doGraphics = True):
     critical_steps = [] # list of step indices where either OB or IB dead time is above zoom_threshold
     counter_chip_by_chip = np.zeros(N_CHIPS)
    
-    zeroOrbitFound = False
+    OrbitResetChecked = True
 
     parallelize = True
 
     exp_eta = int(exp_norb/1000)
 
+    lanemap_invalidKeys = {} # same as lanemap but only for invalid keys
+
     if parallelize:
         import concurrent.futures
         LOG(INFO,f'CPU count = {os.cpu_count()}. Expected size {exp_norb}, {exp_eta} seconds to import it.')
+
         with concurrent.futures.ProcessPoolExecutor() as tor:
             #futures = tor.map(process_vector, raw_data.items())
             futures = tor.map(process_vector, list(zip(rawkeys, t_dynamic["deadchips"])))
-            for k, v1, v2, v3, n3, zeroOrb in futures:
-                if not zeroOrb and k is not None:
+            stcc = 0
+            for k, v1, v2, v3, n3 in futures:
+                
+                if stcc % (1 + len(rawkeys) // 4) == 0:
+                    LOG(INFO,f'{stcc} / {len(rawkeys)}...')
+                    
+                if k is None:
+                    LOG(ERROR,f'Found None orbit. Skipped')
+                    continue
+                if orbitreset > 0 and firstorbitrun-UnanchorableThreshold < k < lastorbitrun+UnanchorableThreshold:
                     lanemap[int(k)] = v1
                     stavemap[int(k)] = v2
                     counter_chip_by_chip = counter_chip_by_chip + v3
-                if zeroOrb and k is not None:
-                    zeroOrbitFound = True
+                elif orbitreset <= 0:
+                    lanemap[int(k)] = v1
+                    stavemap[int(k)] = v2
+                    counter_chip_by_chip = counter_chip_by_chip + v3
+                    OrbitResetChecked = False
+                else:
+                    lanemap_invalidKeys[int(k)] = v1
+
+                stcc += 1
+                    
 
     else: # do not parallize
+        exit()
         # MISSING IMPLEMENTATION OF ZERO ORBIT
         for k, values in raw_data.items():
             if isinstance(k,int) or k.isdigit():
@@ -313,13 +337,22 @@ def main(doGraphics = True):
                 lanemap[int(k)] = n_dead_l
                 stavemap[int(k)] = n_dead_s
                 
-        
+    
     lanemap = dict(sorted(lanemap.items()))
 
-    # Neet to recompute the keys becuase null orbit has been removed
-    if [jj for jj in rawkeys if jj > 0] != list(lanemap.keys()):
-        LOG(FATAL,f'Error in building the list of keys. Probably there were not ordered at the source. Exiting')
+    # Neet to recompute the keys becuase invalid orbits has been removed
+    if set(lanemap.keys()) | set(lanemap_invalidKeys.keys()) == set(rawkeys):
+        pass
+    else:
+        LOG(FATAL,f'Error in building the list of keys. Exiting')
         exit()
+
+    ninvalid = len(lanemap_invalidKeys)
+    if OrbitResetChecked:
+        LOG(INFO if ninvalid == 0 else WARNING,f'There are {ninvalid} invalid orbits')
+    else:
+        LOG(ERROR,f'Orbit reset not available. Map range checks will not be effective')
+        
     keys = list(lanemap.keys())
 
     staticchipmap2 = np.where(counter_chip_by_chip == len(keys))[0].tolist() # when OB single chips are saved, this should be equal to statichipmap
@@ -374,15 +407,18 @@ def main(doGraphics = True):
     maprange = (maxorbit - minorbit) * LHCOrbitNS * 1.e-9
     rctduration = (rctstop-rctstart) / 1000 if rctstart > 0 else -1
 
-    offsetstart = minorbit - firstorbitrun
+    offsetstart =  minorbit - firstorbitrun
     offsetstartsec = offsetstart * LHCOrbitNS * 1.e-9
+    offsetend = maxorbit - lastorbitrun
+    offsetendsec = offsetend * LHCOrbitNS * 1.e-9
 
-    LOG(INFO,f'Run {run}')
     LOG(INFO,f'Evolving map size: {len(keys)}')
     LOG(INFO,f'Map range {minorbit} to {maxorbit}, in seconds: {maprange}')
     LOG(INFO,f'Run duration from RCT object, in seconds: {rctduration}')
-    LOG(INFO,f'Orbit at run start {firstorbitrun}')
+    LOG(INFO,f'Orbit at run start {hex(firstorbitrun)}')
     LOG(INFO,f'Delta first orbit map-run {offsetstart} = {offsetstartsec} sec')
+    LOG(INFO,f'Orbit at run stop {hex(lastorbitrun)}')
+    LOG(INFO,f'Delta last orbit map-run {offsetstart} = {offsetendsec} sec')
 
 
     FullyDeadIB = int(NDead(staticlanemap, 'IB', 'chip'))
@@ -503,6 +539,7 @@ def main(doGraphics = True):
     WorstIBLaneDeadFraction = lanemap[keys[WorstIBStep]][lane_range] / NChipsPerLane(lane_range)
     WorstOBLaneDeadFraction = lanemap[keys[WorstOBStep]][lane_range] / NChipsPerLane(lane_range)
 
+
     if len(keys) > 1:
         LaneDeadTime /= (maxorbit-minorbit)
         if TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
@@ -591,14 +628,23 @@ def main(doGraphics = True):
         if len(keys) < 2:
             QAcheck['Map size'] = 'FATAL'
 
-    ## Null orbit
-    if minorbit > 0 and not zeroOrbitFound:
-        QAcheck['Null orbit'] = 'GOOD'
-    #elif minorbit == 0 and NDead(lanemap[minorbit],'all','chip') == N_CHIPS:
-    elif minorbit > 0 and zeroOrbitFound: 
-        QAcheck['Null orbit'] = 'MEDIUM'
+    ## Invalid orbit
+    if OrbitResetChecked and ninvalid == 0:
+        QAcheck['Invalid orbit'] = 'GOOD'
+    elif not OrbitResetChecked:
+        QAcheck['Invalid orbit'] = 'UNKNOWN'
     else:
-        QAcheck['Null orbit'] = 'BAD'
+        ncio = [kio for kio, v in lanemap_invalidKeys.items() if NDead(v,'all','chip') < N_CHIPS]
+        if ncio:
+            QAcheck['Invalid orbit'] = 'MEDIUM'
+            if len(ncio) > 10:
+                LOG(WARNING,f'More than 10 orbits are invalid with alive chips')
+            else:
+                for nci in ncio:
+                    LOG(WARNING,f'Invalid orbit {hex(nci)} has {NDead(lanemap_invalidKeys[nci],"all","chip")} alive chips')
+        else:
+            QAcheck['Invalid orbit'] = 'MEDIUM'
+    
 
     ## Orbit gaps
     QAcheck['Orbit gaps'] = 'GOOD'
@@ -610,11 +656,16 @@ def main(doGraphics = True):
         QAcheck['Orbit gaps'] = 'BAD'
 
     ## Orbit range
-    QAcheck['Orbit range'] = \
-        'MEDIUM' if maprange > rctduration + 5 else \
-        'GOOD' if maprange >= rctduration - 5 else \
-        'MEDIUM' if maprange >= rctduration - 30 else \
-        'BAD'
+    if not OrbitResetChecked:
+        QAcheck['Orbit range'] = 'UNKNOWN'
+    else:
+        if abs(offsetstart) < 3*NominalGap and abs(offsetend) < 3*NominalGap:
+            QAcheck['Orbit range'] = 'GOOD'
+        elif abs(offsetstart) < UnanchorableThreshold and abs(offsetend) < UnanchorableThreshold:
+            QAcheck['Orbit range'] = 'MEDIUM'
+        else:
+            QAcheck['Orbit range'] = 'BAD'
+            
 
     if QAcheck['Orbit range'] == 'GOOD' and abs(offsetstartsec) > 5:
         QAcheck['Orbit range'] = 'BAD'
@@ -635,14 +686,21 @@ def main(doGraphics = True):
 
        
     Text1 =  f'k#Orbit keys: {len(keys)}'
-    if len(rawkeys) - len(keys) > 0:
-        Text1 += f' + {len(rawkeys)-len(keys)} neglected'
-    Text1 += '#k#' + ','.join(hex(o) for o in rawkeys[:3]) + '...#k#...' + ','.join(hex(o) for o in rawkeys[-3:])
-    Text1 += f'#w#empty#k#Orbit at run start: {hex(firstorbitrun)}'
+    if ninvalid > 0:
+        Text1 += f' + {ninvalid} neglected'
+    Text1 += '#k#' + ','.join(hex(o) for o in keys[:3]) + '...#k#...' + ','.join(hex(o) for o in keys[-3:])
     
-    if zeroOrbitFound:
-        Text1 += f'#w#empty#r#First key orbit = 0 has been neglected'
+    if ninvalid > 0:
+        Text1 += f'#r#{ninvalid} keys neglected:'
+        if ninvalid < 4:
+            Text1 += '#r#' + ','.join(hex(o) for o in lanemap_invalidKeys.keys())
+        else:
+            Text1 += '#r#too many to print'
+
+    Text1 += f'#w#empty#k#Run start/stop: {hex(firstorbitrun)}, {hex(lastorbitrun)}'
+    
     Text1 += f'#w#empty#k#RCT run duration (s): {rctduration:.1f}#k#MAP duration (s): {maprange:.1f}'
+    Text1 += f'#k#Offsets (s): {round(offsetstartsec,3)}, {round(offsetendsec,3)}'
     Text1 += f'#w#empty#k#Dead chips (IB+OB): {FullyDeadIB} + {FullyDeadOB}'
     Text1 += f'#k#OB lanes w/ single dead chips: {len(LanesWithSingleChip)}'
     if clusterizer_summary:

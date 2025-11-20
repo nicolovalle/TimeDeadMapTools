@@ -50,7 +50,7 @@ std::vector<Int_t> MAPNwords;
 std::vector<UShort_t> SMAP;
 std::map<TString, TString> QAcheck;
 Long64_t runstart = -1, runstop = -1;
-Long64_t firstorbitrun = -1;
+Long64_t orbreset = -1;
 std::string mapver = "0";
 int isdefault = false;
 Logger QALOG;
@@ -97,7 +97,7 @@ void DeadMapTREE(TString FILENAME = InputFile, int runnumber = -1, TString outdi
   ts->Branch("run", &runnumber);
   ts->Branch("rctstart", &runstart);
   ts->Branch("rctstop", &runstop);
-  ts->Branch("firstorbitrun", &firstorbitrun); // approximate based on time stamp
+  ts->Branch("orbitreset", &orbreset); // millisec
   ts->Branch("isdefault", &isdefault);
   ts->Branch("static", &SMAP);
   ts->Branch("nkeys", &nkeys);
@@ -135,7 +135,7 @@ void DeadMapTREE(TString FILENAME = InputFile, int runnumber = -1, TString outdi
       runstop = (Long64_t)lims.second;
       auto* orbitReset = cm.getForTimeStamp<std::vector<Long64_t>>("CTP/Calib/OrbitReset", lims.first);
       static int64_t orbitResetMUS = (*orbitReset)[0];
-      if (runstart*1000 > orbitResetMUS) firstorbitrun = (Long64_t) std::ceil((runstart*1000 - orbitResetMUS) / (LHCOrbitNS/1000.)); // approximate based on time stamp
+      if (runstart*1000 > orbitResetMUS) orbreset = (Long64_t) orbitResetMUS/1000; // milliseconds
     }
   }
     
