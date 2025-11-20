@@ -418,7 +418,7 @@ def main(doGraphics = True):
     LOG(INFO,f'Orbit at run start {hex(firstorbitrun)}')
     LOG(INFO,f'Delta first orbit map-run {offsetstart} = {offsetstartsec} sec')
     LOG(INFO,f'Orbit at run stop {hex(lastorbitrun)}')
-    LOG(INFO,f'Delta last orbit map-run {offsetstart} = {offsetendsec} sec')
+    LOG(INFO,f'Delta last orbit map-run {offsetend} = {offsetendsec} sec')
 
 
     FullyDeadIB = int(NDead(staticlanemap, 'IB', 'chip'))
