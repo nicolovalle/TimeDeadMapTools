@@ -1,100 +1,62 @@
 
 # TimeDeadMapTools
 
-This repository contains the code to generate and verify ITS efficiency maps.
+This repository contains the code to  verify ITS efficiency maps.
+The code to produce maps out of CTFs is available in `main` branch of the repo.
 
 ## Prerequisites
 
 Before you begin, ensure you have the following:
-- A valid bookkeeping token
 - An up-to-date O2 environment (as of March 22, 2024)
 
 Place your token in a file named `token.dat`.
 
 The following files should be present in your working directory:
-- `rundeadmap.py`
+- `DeadMapTREE.C`
+- `DeadMapQA.py`
+- `MakeCanvas.py`
 - `mylogger.py`
-- `DeadMapQA.C`
 - `Logger.h`
-- `token.dat`
 
-Make the `rundeadmap.py` executable, if necessary:
+
+```
+
+## Running the Scripts
+
+`DeadMapQA.py` is the script to analyze the map content. It uses `MakeCanvas.py` as library to prduce plots. The input is a specific ROOT based simple trees, containing the dead map and some metadata. Such file is produced with `DeadMapTREE.C`.
+
+Therefore, having the deadmap `.root` object on local disk, to run the analysis on it, the chain is:
+
 ```bash
-chmod +x rundeadmap.py
+root -b DeadMapTREE.C("dmap_file.root",run_number)
+python3 DeadMapQA.py
 ```
 
-## Running the Script
+The `.C` macro creates the file called `DeadMapTREE.root`, taken as default input by `DeadMapQA.py`. One can call the `.py` script with different options (run `python3 DeadMapQA.py --help` to get instructions).
 
-To generate the map, jyst use the following command:
-```bash
-./rundeadmap.py <run_number>
-```
-Please note that the O2 workflow can take several minutes to complete. It's recommended to use a `tmux` session to avoid interruptions.
+The output `.png` files are saved into the `./canvas/` directory. And the logs of the python script are saved in `./QApy.log`. 
 
-## Output and Log Files
-
-Upon successful execution, your working directory will contain the following:
-
-```
-<working dir>
-├── log.log
-└── output/
-     └── <run_number>/
-         ├── main.log
-         ├── period.txt
-         ├── run.json
-         ├── full_ctf_list.dat
-         ├── alien_ctf_epn<epn>.dat
-         ├── its_time_deadmap.root
-         ├── mft_time_deadmap.root
-         ├── o2-deadmapbuilder.err
-         ├── o2-deadmapbuilder.log
-         ├── orbits.png
-         └── ITSQA/
-             ├── DeadMapQA.log
-             ├── DeadMapQA1.png
-             ├── DeadMapQA2.png
-             ├── DeadMapQA3.png
-             ├── DeadMapQA4.png
-             ├── DeadMapQA5.png
-             └── root.log
-```
-
-**Important notes:**
-- You do not need to create any directories manually; the script handles that for you.
-- If you reprocess a run, the directory `<run_number>/` will be deleted and overwritten.
-
-### Output File Descriptions
-- `main.log`: Log of the main script `rundeadmap.py`, which moves to the output folder after completion.
-- `period.txt`: Contains the LHC period of the run.
-- `run.json`: Information about the run, fetched from the bookkeeping system.
-- `its_time_deadmap.root` and `mft_time_deadmap.root`: The generated time-dependent maps.
-- `full_ctf_list.dat`: A list of CTFs available on the grid for the run.
-- `alien_ctf_epn<epn>.dat`: The selected CTFs analyzed by the workflow.
-- `o2-deadmapbuilder.log/err`: Standard output and error logs from the O2 workflow.
-- `orbits.png`: A visualization of the orbit gap, as read from the workflow logs.
-- `ITSQA/`: Output from the quality assessment (QA) checks of the ITS object. This directory is not created if the root macro fails.
 
 ### QA Output Files:
-- `DeadMapQA.log`: The log output from the QA macro.
-- `DeadMapQA1.png`: A summary of the ITS object quality.
-- `DeadMapQA2.png`: The lane status history versus orbits.
-- `DeadMapQA3.png`: The average dead time, stave by stave.
-- `DeadMapQA4.png`: The average dead time, lane by lane.
-- `DeadMapQA5.png`: The average time evolution of dead time for each layer.
-- `root.log`: Standard output and error logs from the command `root -b DeadMapQA.C`.
+- `QApy.log`: The log output from the QA macro.
+- `canvas/full_canvas1.png`: A summary of the ITS object quality with many pads
+- `canvas/full_canvas2.png`: The time-evolution of the lane dead fraction
+- `canvas/full_canvas2_zoomX.png`: The time-evolution of the lane dead fraction in each time region where the dead fraction of IB or OB was above 8%
+- `canvas/full_canvas4.png`: The percentage of dead time lane by lane and stave by stave
+- `canvas/full_canvas5.png`: The trends over time of the dead fraction and recovery rate for each layer
 
-## What to check
 
-The `main.log` file provides a summary of the process, including checks for the O2 workflow logs, orbit gaps in the map, and run duration versus map duration. It also flags any bad quality detected by the QA macro. 
 
-You can check for issues by searching for "WARN", "ERROR", or "FATAL" in the main script logs. If no such strings are found, everything likely ran successfully.
+### Checks
 
-If a QA issue is flagged, check the final lines of `DeadMapQA.log` and inspect the `.png` files for more details.
+The following checks are implemented in the `DeadMapQA.py` script
 
-### Automatic checks
-
-The following automatic checks are implemented in the `DeadMapQA.C` macro.
+- **Invalid orbit**:
+  - An invalid orbit is a map key (orbit) which is more that 330k orbits distant from the run duration 
+  - `UNKNOWN` if the CTP orbit reset could not be fetched by ccdb (so that the map range wrt run duration is unknown)
+  - `GOOD` if there are no invalid orbits
+  - `MEDIUM` otherwise
+  - Invalid orbits are filtered out before diaplaying the map statistics and evaluating the following checks. Information on this is still printed on `full_canvas1.png`.
 
 - **Avg dead time IB**:
   - `GOOD` if the average dead time of IB after the first 10 seconds is below 3%
@@ -104,9 +66,6 @@ The following automatic checks are implemented in the `DeadMapQA.C` macro.
   - `GOOD` if the average dead time of OB after the first 10 seconds is below 5%
   - `MEDIUM` if it is below 10%
   - `BAD` otherwise
-- **Chip interval**:
-  - `GOOD` if the chip IDs in the time-evolving part of the map are properly grouped into lanes
-  - `FATAL` otherwise
 - **Fully dead IB**:
   - `GOOD` if the number of IB chips marked as dead in every step of the map is lower than 9
   - `MEDIUM` if such number is less than 10% of the IB chips (i.e., less than 44)
@@ -122,23 +81,16 @@ The following automatic checks are implemented in the `DeadMapQA.C` macro.
     - `GOOD` if both the static and time-evolving maps are empty
     - `FATAL` otherwise
   - If the object is not the default one:
-    - `GOOD` if both the static and time-evolving maps have entries
+    - `GOOD` if both the static and time-evolving maps are filled
     - `BAD` if the static map is empty
-    - `FATAL` if the time-evolving map is empty
-- **Null orbit**:
-  - `GOOD` if orbit = 0 is not among the map keys
-  - `MEDIUM` if the map contains orbit = 0 and all the chips at that step are marked as bad
-  - `BAD` if the map contains orbit = 0 with alive chips, or if the map contains also negative orbits
+    - `FATAL` if the time-evolving map has less than 2 entries
 - **Orbit gaps**:
   - `BAD` if there is at least one gap in between steps larger than 330k orbits (this is the "un-anchorable" threshold in the digitizer) or if more than 25% of the steps have a gap larger than 380 TFs = 12160 orbits
-  - `MEDIUM` if there is at least one gap larger than 760 TFs or at least three gaps larger than 380 TFs. The BAD condition is evaluated first.
+  - `MEDIUM` if there is at least one gap larger than 760 TFs or at least three gaps larger than 380 TFs. The BAD condition is evaluated with priority.
   - `GOOD` otherwise
 - **Orbit range**:
-  - `GOOD` if the time interval covered by the map is within 5 seconds of the run duration as specified by the RCT ccdb object
-  - `MEDIUM` if the map's time interval exceeds the run duration by more than 5 seconds or is shorter by no more than 30 seconds
-  - `BAD` otherwise (i.e., the difference between the run duration and the map duration is larger than 30 seconds).
-- **Un-anchorable fraction**:
-  - This is the fraction of orbits within the total map range that are not anchorable to a map element by the digitizer. The digitizer rejects the map if the nearest orbit is more than 330k orbits away from the requested one.
-     - `GOOD` if the fraction is below 2% (consider that even a single gap above 330k orbits is not expected, and it triggers a BAD "Orbit gaps" check).
-     - `MEDIUM` if the fraction is below 5%
-     - `BAD` otherwise
+  - `UNKNOWN` if the CTP orbit reset could not be fetched by ccdb (so that the map range wrt run duration is unknown)
+  - `GOOD` The map's orbit range is fully contained within the run's orbit range (as stored in the RCT object), and both map boundaries lie within 3.2 seconds of the corresponding run edge
+  - `MEDIUM` if the condition for GOOD is not satisfied, but each map boundary is still within 330k orbits of the run edges.
+  - `BAD` otherwise (i.e. at least one map boundary lies more than 330k orbits away from the run edges).
+ 

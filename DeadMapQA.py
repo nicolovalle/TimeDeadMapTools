@@ -845,7 +845,7 @@ if __name__ == "__main__":
     Usage = f"""
        {sys.argv[0]} [no-graphics]
        or
-       {sys.argv[0]} input.json [no-graphics]
+       {sys.argv[0]} input.root [no-graphics]
        default input is {tree_input}
     """
 
