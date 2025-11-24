@@ -19,7 +19,7 @@ The following files should be present in your working directory:
 - `Logger.h`
 
 
-```
+
 
 ## Running the Scripts
 
@@ -56,7 +56,8 @@ The following checks are implemented in the `DeadMapQA.py` script
   - `UNKNOWN` if the CTP orbit reset could not be fetched by ccdb (so that the map range wrt run duration is unknown)
   - `GOOD` if there are no invalid orbits
   - `MEDIUM` otherwise
-  - Invalid orbits are filtered out before diaplaying the map statistics and evaluating the following checks. Information on this is still printed on `full_canvas1.png`.
+
+Invalid orbits are filtered out before diaplaying the map statistics and evaluating the following checks. Information on this is still printed on `full_canvas1.png`.
 
 - **Avg dead time IB**:
   - `GOOD` if the average dead time of IB after the first 10 seconds is below 3%
