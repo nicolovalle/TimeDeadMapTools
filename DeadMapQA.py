@@ -659,7 +659,9 @@ def main(doGraphics = True):
     if not OrbitResetChecked:
         QAcheck['Orbit range'] = 'UNKNOWN'
     else:
-        if abs(offsetstart) < 3*NominalGap and abs(offsetend) < 3*NominalGap:
+        if offsetstart < -0.001 or offsetend > 0.001:  # zero, modulo rounding errors
+            QAcheck['Orbit range'] = 'MEDIUM'
+        elif abs(offsetstart) < 3*NominalGap and abs(offsetend) < 3*NominalGap:
             QAcheck['Orbit range'] = 'GOOD'
         elif abs(offsetstart) < UnanchorableThreshold and abs(offsetend) < UnanchorableThreshold:
             QAcheck['Orbit range'] = 'MEDIUM'
