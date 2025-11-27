@@ -1,17 +1,13 @@
 
 # TimeDeadMapTools
 
-This repository contains the code to  verify ITS efficiency maps.
-The code to produce maps out of CTFs is available in `main` branch of the repo.
+This repository contains the code to verify the ITS efficiency maps.
+The code to produce maps out of CTFs is available in the `main` branch of the repo.
 
 ## Prerequisites
 
 Before you begin, ensure you have the following:
 - An up-to-date O2 environment (as of March 22, 2024)
-
-Place your token in a file named `token.dat`.
-
-The following files should be present in your working directory:
 - `DeadMapTREE.C`
 - `DeadMapQA.py`
 - `MakeCanvas.py`
@@ -23,7 +19,7 @@ The following files should be present in your working directory:
 
 ## Running the Scripts
 
-`DeadMapQA.py` is the script to analyze the map content. It uses `MakeCanvas.py` as library to prduce plots. The input is a specific ROOT based simple trees, containing the dead map and some metadata. Such file is produced with `DeadMapTREE.C`.
+`DeadMapQA.py` analyzes the map content. It uses `MakeCanvas.py` as library to prduce plots. The input is a specific ROOT file with simple trees, containing the dead map and some metadata. Such file is produced with `DeadMapTREE.C`.
 
 Therefore, having the deadmap `.root` object on local disk, to run the analysis on it, the chain is:
 
@@ -34,7 +30,7 @@ python3 DeadMapQA.py
 
 The `.C` macro creates the file called `DeadMapTREE.root`, taken as default input by `DeadMapQA.py`. One can call the `.py` script with different options (run `python3 DeadMapQA.py --help` to get instructions).
 
-The output `.png` files are saved into the `./canvas/` directory. And the logs of the python script are saved in `./QApy.log`. 
+The output `.png` files are saved into the `./canvas/` directory and the logs of the python script are saved in the local directory as `QApy.log`. 
 
 
 ### QA Output Files:
