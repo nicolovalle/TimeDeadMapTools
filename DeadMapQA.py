@@ -204,7 +204,7 @@ def index_clusterizer(steps, full_keys, padding_sec=60):  # passing list interes
         LOG(ERROR,f"Found {len(clusters)} > 9 clusters. This is not acceptable. Returning no clusters")
         return []
 
-    LOG(INFO,f"Returning {len(clusters)} clusters with first indices {[c[0] for c in clusters]}")
+    LOG(INFO,f"Returning {len(clusters)} clusters")
     return clusters
         
  
@@ -845,6 +845,14 @@ def main(doGraphics = True):
         
                     
 
+    LOG(INFO,f'Dumping statistics on ITSstat.json')
+    j_stave_dead_time = dict(enumerate(StaveDeadTimeNoRamp))
+
+    JJ = {'run':GLO_RUN, 'stave_dead_time':j_stave_dead_time}
+
+    with open(f"ITSstat.json", "w") as j_f:
+        json.dump(JJ, j_f, indent=4)
+                
     LOG(INFO,f'Returning worst quality {QAFLAG}')
     return QAFLAG
 
