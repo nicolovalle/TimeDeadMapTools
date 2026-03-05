@@ -500,7 +500,6 @@ def main(doGraphics = True):
         if TimeStampFromStart[-1] >= SecForTriggerRamp:
             if DeadFractionIB[-1] > zoom_threshold or DeadFractionOB[-1] > zoom_threshold:
                 critical_steps.append(i)
-                LOG(DEBUG,f'Append step {i} key {keys[i]}. timestamp {TimeStampFromStart[-1]} trigramp {SecForTriggerRamp}')
                 
                 
         # Fill set of lanes with signle chips        
@@ -586,7 +585,7 @@ def main(doGraphics = True):
     # Lanes almost completely dead
     lacd = [ilane for ilane in range(N_LANES) if LaneDeadTimeNoRamp[ilane] >= 0.95]
     LOG(DEBUG,f'LACD run {run} duration {rctduration:.1f} lanes {" ".join(str(x) for x in sorted(lacd))}')
-    if len(LanesWithSingleChip) < 100:
+    if len(lacd) < 100:
         lnames = ''
         for l_ in sorted(lacd):
             _, _, la_, st_, ll_ = Mapping(lane=l_)
@@ -846,9 +845,37 @@ def main(doGraphics = True):
                     
 
     LOG(INFO,f'Dumping statistics on ITSstat.json')
+    # stave dead time
     j_stave_dead_time = dict(enumerate(StaveDeadTimeNoRamp))
-
-    JJ = {'run':GLO_RUN, 'stave_dead_time':j_stave_dead_time}
+    # problematic lanes
+    problanes = [ilane for ilane in range(N_LANES) if LaneDeadTimeNoRamp[ilane] >= 0.70]
+    if len(problanes) < 50:
+        j_problematic_lanes = {}
+        for l_ in problanes:
+            _, _, la_, st_, ll_ = Mapping(lane=l_)
+            j_problematic_lanes[f'L{la_}_{st_}_{ll_}'] = LaneDeadTimeNoRamp[l_]
+    else:
+        j_problematic_lanes = "too_many"
+    # disappearing single chips
+    if len(LanesWithSingleChip) < 50:
+        j_lanes_single_chips = ''
+        for l_ in sorted(LanesWithSingleChip):
+            _, _, la_, st_, ll_ = Mapping(lane=l_)
+            j_lanes_single_chips += f'L{la_}_{st_}_{ll_},'
+        j_lanes_single_chips = j_lanes_single_chips[:-1]
+    else:
+        j_lanes_single_chips = "too_many"
+        
+            
+     
+    JJ = {
+        'run': GLO_RUN,
+        'rct_duration': rctduration,
+        'map_flag': QAFLAG,
+        'stave_dead_time': j_stave_dead_time,
+        'lanes_dead_time_070cut': j_problematic_lanes,
+        'lanes_with_disappearing_single_chips': j_lanes_single_chips
+    }
 
     with open(f"ITSstat.json", "w") as j_f:
         json.dump(JJ, j_f, indent=4)
