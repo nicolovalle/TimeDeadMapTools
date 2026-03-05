@@ -444,6 +444,7 @@ def main(doGraphics = True):
     LaneDeadTime = np.zeros(N_LANES)
     LaneDeadTimeNoRamp = np.zeros(N_LANES)
     StaveDeadTimeNoRamp = np.zeros(N_STAVES)
+    StaveRecovery = np.zeros(N_STAVES)
     StaveRecoveryPerHour = np.zeros(N_STAVES)
     WorstIBLaneDeadFraction = np.zeros(N_LANES)
     WorstOBLaneDeadFraction = np.zeros(N_LANES)
@@ -531,7 +532,7 @@ def main(doGraphics = True):
 
         if i < len(keys)-1 and TimeStampFromStart[-1] >= SecForTriggerRamp and SecForTriggerRamp >= 0:
             isRecoed = (stavemap[keys[i]] == chipsPerStave) & (stavemap[keys[i+1]] < chipsPerStave)
-            StaveRecoveryPerHour += isRecoed  # to be normalized by number of hours
+            StaveRecovery += isRecoed  # to be normalized by number of hours
             nRecoIB += np.sum(isRecoed[:N_STAVES_IB])
             nRecoOB += np.sum(isRecoed[N_STAVES_IB:])
             for ilay in range(7):
@@ -555,7 +556,7 @@ def main(doGraphics = True):
         unAnchorableFrac = unAnchorable / (maxorbit - minorbit)
         recoIBperH = nRecoIB / (maprange / 3600)
         recoOBperH = nRecoOB / (maprange / 3600)
-        StaveRecoveryPerHour /= (maprange / 3600)
+        StaveRecoveryPerHour = StaveRecovery / (maprange / 3600)
     else:
         LaneDeadTime[:] = NA
         unAnchorableFrac = NA
@@ -846,14 +847,16 @@ def main(doGraphics = True):
 
     LOG(INFO,f'Dumping statistics on ITSstat.json')
     # stave dead time
-    j_stave_dead_time = dict(enumerate(StaveDeadTimeNoRamp))
+    j_stave_dead_time = dict(enumerate(np.round(StaveDeadTimeNoRamp,5)))
+    # stave recoveries
+    j_stave_recovery = dict(enumerate(StaveRecovery))
     # problematic lanes
     problanes = [ilane for ilane in range(N_LANES) if LaneDeadTimeNoRamp[ilane] >= 0.70]
     if len(problanes) < 50:
         j_problematic_lanes = {}
         for l_ in problanes:
             _, _, la_, st_, ll_ = Mapping(lane=l_)
-            j_problematic_lanes[f'L{la_}_{st_}_{ll_}'] = LaneDeadTimeNoRamp[l_]
+            j_problematic_lanes[f'L{la_}_{st_}_{ll_}'] = round(LaneDeadTimeNoRamp[l_],5)
     else:
         j_problematic_lanes = "too_many"
     # disappearing single chips
@@ -873,12 +876,13 @@ def main(doGraphics = True):
         'rct_duration': rctduration,
         'map_flag': QAFLAG,
         'stave_dead_time': j_stave_dead_time,
+        'stave_recoveries': j_stave_recovery,
         'lanes_dead_time_070cut': j_problematic_lanes,
         'lanes_with_disappearing_single_chips': j_lanes_single_chips
     }
 
     with open(f"ITSstat.json", "w") as j_f:
-        json.dump(JJ, j_f, indent=4)
+        json.dump(JJ, j_f, indent=2)
                 
     LOG(INFO,f'Returning worst quality {QAFLAG}')
     return QAFLAG
