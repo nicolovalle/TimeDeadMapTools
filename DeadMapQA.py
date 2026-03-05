@@ -455,7 +455,13 @@ def main(doGraphics = True):
 
     nRecoIB = nRecoOB = 0
 
-    SecForTriggerRamp = -1
+    SecForTriggerRamp = TriggerRampSec
+    for orr in keys:
+        if (orr - minorbit) * LHCOrbitNS * 1.e-9 > TriggerRampSec:
+            SecForTriggerRamp = (orr - minorbit) * LHCOrbitNS * 1.e-9
+            LOG(INFO,f'Trigger ramp  duration initially set to {TriggerRampSec} moved to {round(SecForTriggerRamp,2)} sec')
+            break
+        
     for i in range(len(keys)):
 
         if i % (1 + len(keys) // 4) == 0:
@@ -474,8 +480,8 @@ def main(doGraphics = True):
         TimeStampFromStart.append( (currentorbit - minorbit) * LHCOrbitNS * 1.e-9)
         deltaTsec = 0 if i >= len(keys)-1 else (keys[i+1] - currentorbit) * LHCOrbitNS * 1.e-9
 
-        if TimeStampFromStart[-1] > TriggerRampSec and SecForTriggerRamp < 0:
-            SecForTriggerRamp = TimeStampFromStart[-1]
+        #if TimeStampFromStart[-1] > TriggerRampSec and SecForTriggerRamp < 0:
+        #    SecForTriggerRamp = TimeStampFromStart[-1]
 
         # Fraction of dead chips per Barrel
         IBdead = NDead(currentmap,'IB','chip')
@@ -494,6 +500,7 @@ def main(doGraphics = True):
         if TimeStampFromStart[-1] >= SecForTriggerRamp:
             if DeadFractionIB[-1] > zoom_threshold or DeadFractionOB[-1] > zoom_threshold:
                 critical_steps.append(i)
+                LOG(DEBUG,f'Append step {i} key {keys[i]}. timestamp {TimeStampFromStart[-1]} trigramp {SecForTriggerRamp}')
                 
                 
         # Fill set of lanes with signle chips        
@@ -800,9 +807,6 @@ def main(doGraphics = True):
         # Making several canvas2
         zoom_index = 0
         for A,B in CriticalStepsClusters: # A,B are the first and last index of the zoom window
-
-            if TimeStampFromStart[B] <= SecForTriggerRamp:
-                continue
             
             zoom_index += 1
 
@@ -838,8 +842,7 @@ def main(doGraphics = True):
             except Exception as e:
                 Traceback(ERROR,f'Exception while creating zoom canvas n. {zoom_index}: {e}')
 
-        LOG(INFO,f'Remaining with {zoom_index} zoom windows form initial {len(CriticalStepClusters)} clusters')
-
+        
                     
 
     LOG(INFO,f'Returning worst quality {QAFLAG}')
