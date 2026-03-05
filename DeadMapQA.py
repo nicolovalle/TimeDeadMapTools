@@ -204,7 +204,7 @@ def index_clusterizer(steps, full_keys, padding_sec=60):  # passing list interes
         LOG(ERROR,f"Found {len(clusters)} > 9 clusters. This is not acceptable. Returning no clusters")
         return []
 
-    LOG(INFO,f"Returning {len(clusters)} clusters")
+    LOG(INFO,f"Returning {len(clusters)} clusters with first indices {[c[0] for c in clusters]}")
     return clusters
         
  
