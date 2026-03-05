@@ -800,6 +800,10 @@ def main(doGraphics = True):
         # Making several canvas2
         zoom_index = 0
         for A,B in CriticalStepsClusters: # A,B are the first and last index of the zoom window
+
+            if TimeStampFromStart[B] <= SecForTriggerRamp:
+                continue
+            
             zoom_index += 1
 
             try:
@@ -833,6 +837,8 @@ def main(doGraphics = True):
                     )
             except Exception as e:
                 Traceback(ERROR,f'Exception while creating zoom canvas n. {zoom_index}: {e}')
+
+        LOG(INFO,f'Remaining with {zoom_index} zoom windows form initial {len(CriticalStepClusters)} clusters')
 
                     
 
