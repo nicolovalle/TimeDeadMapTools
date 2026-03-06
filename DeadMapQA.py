@@ -868,9 +868,7 @@ def main(doGraphics = True):
         j_lanes_single_chips = j_lanes_single_chips[:-1]
     else:
         j_lanes_single_chips = "too_many"
-        
-            
-     
+         
     JJ = {
         'run': GLO_RUN,
         'rct_duration': rctduration,
@@ -883,6 +881,16 @@ def main(doGraphics = True):
 
     with open(f"ITSstat.json", "w") as j_f:
         json.dump(JJ, j_f, indent=2)
+
+
+    LOG(INFO,f'Dumping statistics on LaneDeadTime.json')
+    j_lane_dead_time = LaneDeadTimeNoRamp.tolist()
+    JJ = {
+        'run': GLO_RUN,
+        'lane_dead_time': j_lane_dead_time
+        }
+    with open(f"LaneDeadTime.json", "w") as j_f:
+        json.dump(JJ, j_f)
                 
     LOG(INFO,f'Returning worst quality {QAFLAG}')
     return QAFLAG
