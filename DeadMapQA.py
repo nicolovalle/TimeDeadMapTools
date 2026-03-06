@@ -190,7 +190,7 @@ def index_clusterizer(steps, full_keys, padding_sec=60):  # passing list interes
         a,b = (A,B)
         while True:
             a -= 1
-            if a < 1 or (full_keys[A] - full_keys[a]) > padding_orb:
+            if a < 0 or (full_keys[A] - full_keys[a]) > padding_orb:
                 a += 1
                 break
         while True:
