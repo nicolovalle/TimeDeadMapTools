@@ -6,6 +6,7 @@ import time
 import os
 import sys
 import uproot
+from datetime import datetime
 
 import MakeCanvas
 from mylogger import *
@@ -267,15 +268,23 @@ def main(doGraphics = True):
         nwords = list(t_dynamic['nwords'])
         rawkeys = list(t_dynamic['key'])
 
+    def orbit_to_timestamp(orb):
+        if orbitreset > 0 and orb > 0:
+            return int(orbitreset + orb * (LHCOrbitNS * 1.e-6))
+        else:
+            return -1
+            
 
-    if orbitreset > 0 and rctstart > 0 and rctstop > 0:
-        firstorbitrun = int((rctstart - orbitreset) / (LHCOrbitNS * 1.e-6))  # millisec / millisec
-        lastorbitrun = int((rctstop - orbitreset) / (LHCOrbitNS * 1.e-6))  # millisec / millisec
-    else:
-        firstorbitrun = lastorbitrun = -1
-        
-        
+    def timestamp_to_orbit(ts):
+        if orbitreset > 0 and ts > 0:
+            return int((ts - orbitreset) / (LHCOrbitNS * 1.e-6)) # millisec / millisec
+        else:
+            return -1
 
+
+    firstorbitrun = timestamp_to_orbit(rctstart)
+    lastorbitrun = timestamp_to_orbit(rctstop)
+    
         
     lanemap = {}
     stavemap = {} # stavemap[orbit] = number of chips dead in the stave at that step
@@ -817,8 +826,14 @@ def main(doGraphics = True):
                 iat = [i for i in range(A,B+1) if max(DeadFractionIB[i], DeadFractionOB[i]) > zoom_threshold and TimeStampFromStart[i] > SecForTriggerRamp]
                 first_orb = keys[iat[0]]
                 last_orb = keys[iat[-1]]
-                first_sec = TimeStampFromStart[iat[0]]
-                last_sec = TimeStampFromStart[iat[-1]]
+                #first_sec = TimeStampFromStart[iat[0]]
+                #last_sec = TimeStampFromStart[iat[-1]]
+                try:
+                    first_time = datetime.fromtimestamp(orbit_to_timestamp(first_orb)//1000).strftime('%H:%M:%S')
+                    last_time = datetime.fromtimestamp((500+orbit_to_timestamp(last_orb))//1000).strftime('%H:%M:%S')
+                except:
+                    first_time = '...'
+                    last_time = '...'
                 firstIB = 100*DeadFractionIB[iat[0]]
                 firstOB = 100*DeadFractionOB[iat[0]]
                 lastIB = 100*DeadFractionIB[iat[-1]]
@@ -826,7 +841,8 @@ def main(doGraphics = True):
                 maxIB = 100*max(DeadFractionIB[i] for i in iat)
                 maxOB = 100*max(DeadFractionOB[i] for i in iat)           
 
-                c2spec0 = f', with > {100*zoom_threshold}% missing. Zoom #{zoom_index}: orb {hex(first_orb)} = {first_sec:.1f}s ({firstIB:.1f}; {firstOB:.1f})% to orb {hex(last_orb)} = {last_sec:.1f}s ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
+                
+                c2spec0 = f', zoom #{zoom_index} ({100*zoom_threshold}% thr). Orb {hex(first_orb)} = {first_time} ({firstIB:.1f}; {firstOB:.1f})% to orb {hex(last_orb)} = {last_time} ({lastIB:.1f}; {lastOB:.1f})%. Max dead fraction ({maxIB:.1f}; {maxOB:.1f})%'
                 LOG(INFO,f'Zoom details {c2spec0}')
                 c2spec2 = f'zoom{zoom_index}'
             
