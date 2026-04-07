@@ -366,7 +366,7 @@ def make_canvas2(
     candpi = 500
     LOG(INFO,f'Evaluating sampling the map for display')
     scale_legend = "No sampling"
-    if max([keys[i] - keys[i-1] for i in range(1,len(keys))]) > 17000: # approx 1.5 seconds
+    if max([keys[i] - keys[i-1] for i in range(1,len(keys))]) > 33000: # approx 3 seconds
         LOG(INFO,f'There are large gaps, original size {len(keys)} will be kept')
         arrays = [lanemap[k] for k in keys]  # Corresponding y-values (arrays)
     else:
