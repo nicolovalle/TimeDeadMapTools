@@ -29,7 +29,7 @@ class Logger:
 
     def cropstr(self, s, n):
         n = max(n, 4)
-        return s.ljust(n) if len(s) <= n else s[:n-2] + '..'
+        return s.ljust(n) if len(s) <= n else s[:n-3] + '..' + s[-1]
 
     def log(self, severity, *message):
 
