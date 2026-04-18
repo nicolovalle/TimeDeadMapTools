@@ -27,9 +27,9 @@ class Logger:
     def set_verbosity(self, vb: int):
         self.verbosity = vb
 
-    def cropstr(self, s, n, m=0):
+    def cropstr(self, s, n):
         n = max(n, 4)
-        return s.ljust(n) if len(s) <= n else s[:n-2-m] + '..' + s[0-m:]
+        return s.ljust(n) if len(s) <= n else s[:n-2] + '..' 
 
     def log(self, severity, *message):
 
