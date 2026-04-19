@@ -43,7 +43,7 @@ class Logger:
         filename = str(inspect.stack()[1][1]).split('/')[-1]
         filename = self.cropstr(filename, len(sys.argv[0]) - 2)
         funcname = str(inspect.stack()[2][3])
-        funcname = self.cropstr(funcname, 10, 1)
+        funcname = self.cropstr(funcname, 10)
 
         tt = datetime.now()
         tstamp = "%s%s%s-%s:%s:%s" % (str(tt.year)[-2:], str(tt.month).zfill(2), str(tt.day).zfill(2), str(tt.hour).zfill(2), str(tt.minute).zfill(2), str(tt.second).zfill(2))
