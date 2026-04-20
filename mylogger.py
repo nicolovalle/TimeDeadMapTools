@@ -11,6 +11,22 @@ DEBUG = 'DEBUG'
 WARN = WARNING
 IMPO = IMPORTANT
 
+SEVERITY_LEVELS = {
+    DEBUG: 10,
+    INFO: 20,
+    WARNING: 30,
+    ERROR: 40,
+    FATAL: 50,
+    IMPORTANT: 100
+}
+
+
+def is_higher_severity(s1, s2):
+    return SEVERITY_LEVELS[s1] > SEVERITY_LEVELS[s2]
+def is_atleast_severity(s1, s2):
+    return SEVERITY_LEVELS[s1] >= SEVERITY_LEVELS[s2]
+
+# TODO: import newly introduced severity levels
 class Logger:
     def __init__(self, logfile):
         self.logfile = logfile
